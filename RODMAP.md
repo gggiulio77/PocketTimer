@@ -1,0 +1,103 @@
+# Timer App Development Roadmap
+
+This document outlines the steps to create the timer application.
+
+### Step 1: Build the Timer UI and Local Logic
+
+This step focuses on creating a robust, user-friendly timer that runs entirely within the app.
+
+*   **Tasks:**
+    1.  **Create the UI:** Using Jetpack Compose, build a screen with:
+        *   `TextField`s for minutes and seconds, with input validation to limit values to a maximum of 59.
+        *   A large `Text` element to display the current countdown.
+        *   Buttons for "Start", "Pause", "Set", and "Reset".
+    2.  **Implement UI Logic & State Management:**
+        *   Use a `ViewModel` to hold and manage all UI state (remaining time, running status, input values).
+        *   The app starts with a default 2-minute timer displayed and ready to go.
+        *   The "Start" button is enabled when the timer is not running.
+        *   The "Set" button is only enabled if the user modifies the time inputs.
+        *   When the timer finishes, it automatically resets to the 2-minute default, ready for the next use.
+    3.  **Implement Timer Countdown:** Use Kotlin Coroutines within the `ViewModel` for the countdown logic.
+
+*   **Concepts to learn:**
+    *   **Jetpack Compose:** For building the UI. Focus on `Column`, `Row`, `Text`, `Button`, `TextField` and state management.
+    *   **ViewModel & StateFlow:** To store and manage UI-related data in a lifecycle-conscious way, creating a single source of truth for the UI.
+    *   **Kotlin Coroutines:** For running the countdown logic without blocking the main thread.
+
+*   **Documentation:**
+    *   [Compose UI basics](https://developer.android.com/jetpack/compose/layouts/basics)
+    *   [State in Jetpack Compose](https://developer.android.com/jetpack/compose/state)
+    *   [ViewModel Overview](https://developer.android.com/topic/libraries/architecture/viewmodel)
+    *   [Kotlin coroutines on Android](https://developer.android.com/kotlin/coroutines)
+
+### Step 2: Move the Timer to a Foreground Service
+
+A timer that stops when the phone is locked is not very useful. To fix this, we'll move the timer logic into a service that can run in the background.
+
+*   **Tasks:**
+    1.  **Create a Service:** Create a class that inherits from `Service`.
+    2.  **Make it a Foreground Service:** Start the service as a "foreground service". This requires showing a persistent notification to the user, which should display the remaining time.
+    3.  **Move Timer Logic:** Move the coroutine-based countdown logic from your `ViewModel` into the service.
+    4.  **Handle Permissions:** You will need to request the `POST_NOTIFICATIONS` permission on Android 13 and higher.
+    5.  **Communicate between UI and Service:** Implement a way for your UI (the Activity/Composables) to start the timer in the service and receive updates on the remaining time. The recommended approach for this is using a **bound service**.
+
+*   **Concepts to learn:**
+    *   **Services:** Android components for long-running operations in the background.
+    *   **Foreground Services:** A special type of service that the user is actively aware of.
+    *   **Bound Services:** A service that allows other components (like your activity) to bind to it, creating a client-server interface for direct communication.
+    *   **Notifications:** How to create and display notifications.
+
+*   **Documentation:**
+    *   [Services overview](https://developer.android.com/guide/components/services)
+    *   [Foreground Services](https://developer.android.com/guide/components/foreground-services)
+    *   [Bound Services](https://developer.android.com/guide/components/bound-services)
+    *   [Create a Notification](https://developer.android.com/develop/ui/views/notifications/build-notification)
+
+### Step 3: Implement Headphone Controls with `MediaSession`
+
+This is the core feature. Your service will create a media session to listen for headphone button presses.
+
+*   **Tasks:**
+    1.  **Create a MediaSession:** In your service, create and initialize a `MediaSessionCompat` object.
+    2.  **Implement Callbacks:** Create a `MediaSessionCompat.Callback` to handle media button events.
+        *   `onPlay()`: Will start the timer in your service.
+        *   `onPause()`: Will pause the timer.
+        *   `onStop()`: Will stop and reset the timer.
+    3.  **Set Session Active:** Make your media session the active one by calling `setActive(true)`. This tells the system you are now the primary "media" app.
+    4.  **Declare a Media Button Receiver:** In your `AndroidManifest.xml`, declare a `BroadcastReceiver` for `Intent.ACTION_MEDIA_BUTTON`. This is crucial for receiving button events when your app is in the background.
+
+*   **Concepts to learn:**
+    *   **MediaSessionCompat:** The standard way to interact with Android's media system.
+    *   **MediaSession Callbacks:** The methods that are triggered by media controls.
+    *   **MediaButtonReceiver:** The component that listens for media button broadcasts system-wide.
+
+*   **Documentation:**
+    *   [Guide to media sessions](https://developer.android.com/guide/topics/media-apps/media-apps-overview)
+    *   [Respond to media buttons](https://developer.android.com/guide/topics/media-apps/mediabuttons)
+
+### Step 4: Play the Alarm with Audio Focus
+
+When the timer finishes, you need to play a sound. To do this politely without abruptly stopping the user's music, you'll request "audio focus".
+
+*   **Tasks:**
+    1.  **Request Audio Focus:** When the timer in your service reaches zero, get an instance of `AudioManager` and request audio focus. You should request `AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK`, which tells other apps to lower their volume temporarily.
+    2.  **Play Sound:** Once you get audio focus, use the `MediaPlayer` class to play your generic beep sound.
+    3.  **Release Focus:** After your sound has finished playing, release the audio focus so the other app can return to its normal volume.
+
+*   **Concepts to learn:**
+    *   **Audio Focus:** The system for managing audio playback between multiple apps.
+    *   **AudioManager:** The class used to manage audio, including focus.
+    *   **MediaPlayer:** A simple class for playing audio files.
+
+*   **Documentation:**
+    *   [Managing audio focus](https://developer.android.com/guide/topics/media-apps/audio-focus)
+    *   [MediaPlayer overview](https://developer.android.com/guide/topics/media/mediaplayer)
+
+### Step 5: Onboarding and Polish
+
+The final step is to make the app user-friendly by being transparent about its behavior.
+
+*   **Tasks:**
+    1.  **Create an Onboarding Screen:** On the first launch, show a simple screen or dialog.
+    2.  **Explain the Behavior:** Clearly explain that the app will take over the headphone buttons to control the timer and that this will prevent them from controlling music apps.
+    3.  **Refine UI/UX:** Test the app and make sure it's intuitive and handles edge cases gracefully (e.g., what happens if the user denies the notification permission?).
