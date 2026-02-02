@@ -35,17 +35,17 @@ This step focuses on creating a robust, user-friendly timer that runs entirely w
 A timer that stops when the phone is locked is not very useful. To fix this, we'll move the timer logic into a service that can run in the background.
 
 *   **Tasks:**
-    1.  **Create a Service:** Create a class that inherits from `Service`.
-    2.  **Make it a Foreground Service:** Start the service as a "foreground service". This requires showing a persistent notification to the user, which should display the remaining time.
-    3.  **Move Timer Logic:** Move the coroutine-based countdown logic from your `ViewModel` into the service.
-    4.  **Handle Permissions:** You will need to request the `POST_NOTIFICATIONS` permission on Android 13 and higher.
-    5.  **Communicate between UI and Service:** Implement a way for your UI (the Activity/Composables) to start the timer in the service and receive updates on the remaining time. The recommended approach for this is using a **bound service**.
+    1.  **Create the Service:** Create a class that inherits from `Service` and make it the **single source of truth** for all timer state and logic.
+    2.  **Make it a Foreground Service:** Start the service as a "foreground service".
+    3.  **Refine Notification Behavior:** Show a persistent notification that displays the remaining time. The notification should only be visible while the timer is running and must be dismissed when the timer is reset, or finished.
+    4.  **Handle Permissions:** Request necessary permissions like `POST_NOTIFICATIONS` and `FOREGROUND_SERVICE_DATA_SYNC`.
+    5.  **Communicate between UI and Service:** Use the **Bound Service** pattern. The `ViewModel` becomes a "dumb bridge" that connects the UI to the service, collects its state, and forwards user events.
 
 *   **Concepts to learn:**
     *   **Services:** Android components for long-running operations in the background.
-    *   **Foreground Services:** A special type of service that the user is actively aware of.
-    *   **Bound Services:** A service that allows other components (like your activity) to bind to it, creating a client-server interface for direct communication.
-    *   **Notifications:** How to create and display notifications.
+    *   **Foreground Services:** A special type of service that the user is actively aware of, with a required notification.
+    *   **Bound Services:** The recommended pattern for UI-Service communication, allowing direct method calls and data observation.
+    *   **Notifications & Channels:** How to create, display, and dismiss notifications.
 
 *   **Documentation:**
     *   [Services overview](https://developer.android.com/guide/components/services)
@@ -61,14 +61,13 @@ This is the core feature. Your service will create a media session to listen for
     1.  **Create a MediaSession:** In your service, create and initialize a `MediaSessionCompat` object.
     2.  **Implement Callbacks:** Create a `MediaSessionCompat.Callback` to handle media button events.
         *   `onPlay()`: Will start the timer in your service.
-        *   `onPause()`: Will pause the timer.
-        *   `onStop()`: Will stop and reset the timer.
+        *   `onPause()`: Will reset the timer in your service. (Note: calls reset default method).
     3.  **Set Session Active:** Make your media session the active one by calling `setActive(true)`. This tells the system you are now the primary "media" app.
     4.  **Declare a Media Button Receiver:** In your `AndroidManifest.xml`, declare a `BroadcastReceiver` for `Intent.ACTION_MEDIA_BUTTON`. This is crucial for receiving button events when your app is in the background.
 
 *   **Concepts to learn:**
     *   **MediaSessionCompat:** The standard way to interact with Android's media system.
-    *   **MediaSession Callbacks:** The methods that are triggered by media controls.
+    *   **MediaSession Callbacks (`onPlay`, `onPause`):** The methods that are triggered by media controls.
     *   **MediaButtonReceiver:** The component that listens for media button broadcasts system-wide.
 
 *   **Documentation:**
@@ -99,5 +98,5 @@ The final step is to make the app user-friendly by being transparent about its b
 
 *   **Tasks:**
     1.  **Create an Onboarding Screen:** On the first launch, show a simple screen or dialog.
-    2.  **Explain the Behavior:** Clearly explain that the app will take over the headphone buttons to control the timer and that this will prevent them from controlling music apps.
+    2.  **Explain the Behavior:** Clearly. Explain that the app will take over the headphone buttons to control the timer and that this will prevent them from controlling music apps.
     3.  **Refine UI/UX:** Test the app and make sure it's intuitive and handles edge cases gracefully (e.g., what happens if the user denies the notification permission?).

@@ -1,92 +1,93 @@
 package com.example.simpletimer
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class TimerViewModel : ViewModel() {
 
+    private var timerService: TimerService? = null
+
+    // These are now just mirrors of the service's state
     private val _remainingTime = MutableStateFlow(0L)
-    val remainingTime: StateFlow<Long> = _remainingTime
+    val remainingTime: StateFlow<Long> = _remainingTime.asStateFlow()
 
     private val _isRunning = MutableStateFlow(false)
-    val isRunning: StateFlow<Boolean> = _isRunning
-
-    // This is true if the user has changed the inputs
-    private val _isDirty = MutableStateFlow(false)
-    val isDirty: StateFlow<Boolean> = _isDirty
+    val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
     private val _minutes = MutableStateFlow("")
-    val minutes: StateFlow<String> = _minutes
+    val minutes: StateFlow<String> = _minutes.asStateFlow()
 
     private val _seconds = MutableStateFlow("")
-    val seconds: StateFlow<String> = _seconds
+    val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    private var timerJob: Job? = null
+    private val _isDirty = MutableStateFlow(false)
+    val isDirty: StateFlow<Boolean> = _isDirty.asStateFlow()
 
-    init {
-        resetToDefault()
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            val binder = service as TimerService.TimerBinder
+            timerService = binder.getService()
+            // Start collecting all states from the service
+            viewModelScope.launch {
+                timerService?.remainingTime?.collect { _remainingTime.value = it }
+            }
+            viewModelScope.launch {
+                timerService?.isRunning?.collect { _isRunning.value = it }
+            }
+            viewModelScope.launch {
+                timerService?.minutes?.collect { _minutes.value = it }
+            }
+            viewModelScope.launch {
+                timerService?.seconds?.collect { _seconds.value = it }
+            }
+            viewModelScope.launch {
+                timerService?.isDirty?.collect { _isDirty.value = it }
+            }
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            timerService = null
+        }
     }
 
-    fun onMinutesChanged(newMinutes: String) {
-        val filtered = newMinutes.filter { it.isDigit() }
-        val value = filtered.toIntOrNull()
-        if (value != null && value > 59) {
-            _minutes.value = "59"
-        } else {
-            _minutes.value = filtered
+    fun bindService(context: Context) {
+        Intent(context, TimerService::class.java).also {
+            context.bindService(it, connection, Context.BIND_AUTO_CREATE)
         }
-        _isDirty.value = true
+    }
+
+    fun unbindService(context: Context) {
+        context.unbindService(connection)
+    }
+
+    // --- All public methods are now just simple pass-through calls to the service --- 
+
+    fun onMinutesChanged(newMinutes: String) {
+        timerService?.onMinutesChanged(newMinutes)
     }
 
     fun onSecondsChanged(newSeconds: String) {
-        val filtered = newSeconds.filter { it.isDigit() }
-        val value = filtered.toIntOrNull()
-        if (value != null && value > 59) {
-            _seconds.value = "59"
-        } else {
-            _seconds.value = filtered
-        }
-        _isDirty.value = true
+        timerService?.onSecondsChanged(newSeconds)
     }
 
     fun setTimer() {
-        val m = _minutes.value.toLongOrNull() ?: 0
-        val s = _seconds.value.toLongOrNull() ?: 0
-        _remainingTime.value = (m * 60 + s) * 1000
-        _isDirty.value = false // We've now set the new time
+        timerService?.setTimerFromInputs()
     }
 
     fun startTimer() {
-        if (_isRunning.value || _remainingTime.value <= 0) return
-
-        _isRunning.value = true
-        timerJob = viewModelScope.launch {
-            while (_remainingTime.value > 0) {
-                delay(1000)
-                _remainingTime.value -= 1000
-            }
-            // When timer finishes, reset to default
-            resetToDefault()
-        }
+        timerService?.startTimer()
     }
 
-    fun pauseTimer() {
-        _isRunning.value = false
-        timerJob?.cancel()
-    }
-
-    // The Reset button will now just go back to the default state
     fun resetToDefault() {
-        timerJob?.cancel()
-        _isRunning.value = false
-        _minutes.value = "2"
-        _seconds.value = ""
-        _remainingTime.value = 2 * 60 * 1000 // 2 minutes
-        _isDirty.value = false
+        timerService?.resetToDefault()
     }
 }
