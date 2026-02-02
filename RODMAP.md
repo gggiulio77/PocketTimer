@@ -60,15 +60,17 @@ This is the core feature. Your service will create a media session to listen for
 *   **Tasks:**
     1.  **Create a MediaSession:** In your service, create and initialize a `MediaSessionCompat` object.
     2.  **Implement Callbacks:** Create a `MediaSessionCompat.Callback` to handle media button events.
-        *   `onPlay()`: Will start the timer in your service.
-        *   `onPause()`: Will reset the timer in your service. (Note: calls reset default method).
-    3.  **Set Session Active:** Make your media session the active one by calling `setActive(true)`. This tells the system you are now the primary "media" app.
+        *   `onPlay()`: A single click starts the timer. A second, consecutive click will reset the timer.
+        *   `onPause()`: A single click resets the timer.
+    3.  **Set Session Active:** Make your media session the active one by calling `setActive(true)`.
+        *   **Key Insight:** To reliably control the timer from a locked screen without interfering with other media apps, the session is made active when the app starts and, most importantly, is re-activated every time the screen is turned off by listening for the `ACTION_SCREEN_OFF` broadcast. This ensures the app has control when it's most needed.
     4.  **Declare a Media Button Receiver:** In your `AndroidManifest.xml`, declare a `BroadcastReceiver` for `Intent.ACTION_MEDIA_BUTTON`. This is crucial for receiving button events when your app is in the background.
 
 *   **Concepts to learn:**
     *   **MediaSessionCompat:** The standard way to interact with Android's media system.
     *   **MediaSession Callbacks (`onPlay`, `onPause`):** The methods that are triggered by media controls.
     *   **MediaButtonReceiver:** The component that listens for media button broadcasts system-wide.
+    *   **BroadcastReceiver:** For listening to system-wide events like the screen turning off (`ACTION_SCREEN_OFF`).
 
 *   **Documentation:**
     *   [Guide to media sessions](https://developer.android.com/guide/topics/media-apps/media-apps-overview)

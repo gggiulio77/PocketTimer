@@ -3,11 +3,16 @@ package com.example.simpletimer
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Binder
 import android.os.IBinder
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
+import androidx.media.session.MediaButtonReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,7 +29,12 @@ class TimerService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var timerJob: Job? = null
 
-    // --- State and Logic --- 
+    // --- MediaSession ---
+    private lateinit var mediaSession: MediaSessionCompat
+    private var lastClickTimestamp = 0L
+    private val doubleClickThreshold = 500 // ms
+
+    // --- State and Logic ---
     private val _remainingTime = MutableStateFlow(0L)
     val remainingTime: StateFlow<Long> = _remainingTime.asStateFlow()
 
@@ -40,7 +50,15 @@ class TimerService : Service() {
     private val _seconds = MutableStateFlow("")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    // --- Service Lifecycle --- 
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                mediaSession.isActive = true
+            }
+        }
+    }
+
+    // --- Service Lifecycle ---
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
@@ -51,9 +69,29 @@ class TimerService : Service() {
         super.onCreate()
         createNotificationChannel()
         resetToDefault()
+
+        // --- MediaSession Initialization ---
+        mediaSession = MediaSessionCompat(this, "SimpleTimer").apply {
+            setCallback(mediaSessionCallback)
+            setPlaybackState(
+                PlaybackStateCompat.Builder()
+                    .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
+                    .build()
+            )
+        }
+        mediaSession.isActive = true
+
+        // Register receiver for screen off events
+        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        registerReceiver(screenOffReceiver, filter)
     }
 
-    // --- Public API for the ViewModel --- 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        MediaButtonReceiver.handleIntent(mediaSession, intent)
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    // --- Public API for the ViewModel ---
     fun onMinutesChanged(newMinutes: String) {
         val filtered = newMinutes.filter { it.isDigit() }
         val value = filtered.toIntOrNull()
@@ -113,7 +151,25 @@ class TimerService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
-    // --- Notification --- 
+    // --- MediaSession Callback ---
+    private val mediaSessionCallback = object : MediaSessionCompat.Callback() {
+        override fun onPlay() {
+            val now = System.currentTimeMillis()
+            if (now - lastClickTimestamp < doubleClickThreshold) {
+                // Double-click detected
+                resetToDefault()
+            } else {
+                startTimer()
+            }
+            lastClickTimestamp = now
+        }
+
+        override fun onPause() {
+            resetToDefault()
+        }
+    }
+
+    // --- Notification ---
     private fun createNotificationChannel() {
         val name = "Timer Service Channel"
         val descriptionText = "Channel for Timer Foreground Service"
@@ -148,6 +204,8 @@ class TimerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         timerJob?.cancel()
+        mediaSession.release()
+        unregisterReceiver(screenOffReceiver) // Unregister receiver
     }
 
     companion object {
