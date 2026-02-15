@@ -5,13 +5,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import com.example.simpletimer.R
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 @UnstableApi // Media3 is still unstable
 class PlaybackService : MediaSessionService() {
@@ -48,14 +48,35 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         val player = ExoPlayer.Builder(this).build()
         player.addListener(playerListener)
-        // Set a silent audio file to play in a loop. This is a workaround to keep the media session active.
-        val silentAudio = MediaItem.fromUri("android.resource://$packageName/${R.raw.silence}")
-        player.setMediaItem(silentAudio)
-        player.repeatMode = Player.REPEAT_MODE_ONE
-        player.playWhenReady = true // Start playing the silent audio
-        player.prepare()
 
-        mediaSession = MediaSession.Builder(this, player).build()
+        mediaSession = MediaSession.Builder(this, player)
+            .setCallback(object : MediaSession.Callback {
+
+                @Deprecated("Deprecated in Java")
+                override fun onPlaybackResumption(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo
+                ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+
+                    timerService?.let {
+                        if (it.isRunning.value) {
+                            it.resetToDefault()
+                        } else {
+                            it.startTimer()
+                        }
+                    }
+
+                    // Return an empty media list — we are not actually resuming media
+                    return Futures.immediateFuture(
+                        MediaSession.MediaItemsWithStartPosition(
+                            emptyList(),
+                            0,
+                            0L
+                        )
+                    )
+                }
+            })
+            .build()
 
         // Bind to TimerService
         val intent = Intent(this, TimerService::class.java)
