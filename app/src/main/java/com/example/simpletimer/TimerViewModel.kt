@@ -1,5 +1,6 @@
 package com.example.simpletimer
 
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -14,6 +15,7 @@ import kotlinx.coroutines.launch
 
 class TimerViewModel : ViewModel() {
 
+    @SuppressLint("StaticFieldLeak")
     private var timerService: TimerService? = null
 
     // These are now just mirrors of the service's state
@@ -88,6 +90,6 @@ class TimerViewModel : ViewModel() {
     }
 
     fun resetToDefault() {
-        timerService?.resetToDefault()
+        timerService?.stopAndResetToSetTime()
     }
 }

@@ -7,7 +7,6 @@ import android.content.ServiceConnection
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
-import android.media.session.PlaybackState
 import android.os.IBinder
 import android.service.notification.NotificationListenerService
 import android.util.Log
@@ -82,9 +81,19 @@ class MediaSessionObserverService : NotificationListenerService() {
 
                     override fun onMetadataChanged(metadata: MediaMetadata?) {
                         super.onMetadataChanged(metadata)
-                        // A new track will usually have a different duration.
-                        if (metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) != lastMetadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)) {
+
+                        val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                        val newArtist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                        val newAlbum = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
+
+                        val lastTitle = lastMetadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                        val lastArtist = lastMetadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                        val lastAlbum = lastMetadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
+
+                        // We check for lastMetadata not to be null, to avoid triggering the timer when switching apps.
+                        if (lastMetadata != null && (newTitle != lastTitle || newArtist != lastArtist || newAlbum != lastAlbum)) {
                             Log.d("MediaSessionObserver", "Metadata changed for ${controller.packageName}. Starting timer.")
+                            // Assuming startTimer() resets the timer if it's already running.
                             timerService?.startTimer()
                         }
                         lastMetadata = metadata

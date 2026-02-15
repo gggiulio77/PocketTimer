@@ -24,7 +24,7 @@ class TimerService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var timerJob: Job? = null
 
-    // --- State and Logic --- 
+    // --- State and Logic ---
     private val _remainingTime = MutableStateFlow(0L)
     val remainingTime: StateFlow<Long> = _remainingTime.asStateFlow()
 
@@ -40,7 +40,7 @@ class TimerService : Service() {
     private val _seconds = MutableStateFlow("")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    // --- Service Lifecycle --- 
+    // --- Service Lifecycle ---
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
@@ -53,7 +53,7 @@ class TimerService : Service() {
         resetToDefault()
     }
 
-    // --- Public API for the ViewModel --- 
+    // --- Public API for the ViewModel ---
     fun onMinutesChanged(newMinutes: String) {
         val filtered = newMinutes.filter { it.isDigit() }
         val value = filtered.toIntOrNull()
@@ -84,10 +84,16 @@ class TimerService : Service() {
     }
 
     fun startTimer() {
-        if (!_isDirty.value) {
-             setTimerFromInputs()
+        if (_isRunning.value) {
+            // If timer is running and a song changes, stop and reset to set time.
+            stopAndResetToSetTime()
+            return
         }
-        if (_isRunning.value || _remainingTime.value <= 0) return
+
+        // This is a fresh start, either from UI or for the first time.
+        setTimerFromInputs()
+
+        if (_remainingTime.value <= 0) return
 
         _isRunning.value = true
         startForeground(NOTIFICATION_ID, createNotification())
@@ -98,9 +104,17 @@ class TimerService : Service() {
                 _remainingTime.value -= 1000
                 updateNotification()
             }
+            // Timer finished normally
             _isRunning.value = false
-            resetToDefault()
+            stopForeground(STOP_FOREGROUND_REMOVE)
         }
+    }
+
+    fun stopAndResetToSetTime() {
+        timerJob?.cancel()
+        _isRunning.value = false
+        setTimerFromInputs() // Resets timer to the value in the text fields
+        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     fun resetToDefault() {
@@ -113,7 +127,7 @@ class TimerService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
-    // --- Notification --- 
+    // --- Notification ---
     private fun createNotificationChannel() {
         val name = "Timer Service Channel"
         val descriptionText = "Channel for Timer Foreground Service"
