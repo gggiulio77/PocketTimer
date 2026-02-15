@@ -3,16 +3,11 @@ package com.example.simpletimer
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Binder
 import android.os.IBinder
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
-import androidx.media.session.MediaButtonReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,14 +20,8 @@ import java.util.Locale
 
 class TimerService : Service() {
 
-    private val binder = TimerBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var timerJob: Job? = null
-
-    // --- MediaSession ---
-    private lateinit var mediaSession: MediaSessionCompat
-    private var lastClickTimestamp = 0L
-    private val doubleClickThreshold = 500 // ms
 
     // --- State and Logic ---
     private val _remainingTime = MutableStateFlow(0L)
@@ -50,45 +39,25 @@ class TimerService : Service() {
     private val _seconds = MutableStateFlow("")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    private val screenOffReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                mediaSession.isActive = true
-            }
-        }
-    }
-
-    // --- Service Lifecycle ---
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
 
-    override fun onBind(intent: Intent): IBinder = binder
+    private val binder = TimerBinder()
+
+    override fun onBind(intent: Intent?): IBinder {
+        return binder
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForeground(NOTIFICATION_ID, createNotification())
+        return START_STICKY
+    }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         resetToDefault()
-
-        // --- MediaSession Initialization ---
-        mediaSession = MediaSessionCompat(this, "SimpleTimer").apply {
-            setCallback(mediaSessionCallback)
-            setPlaybackState(
-                PlaybackStateCompat.Builder()
-                    .setActions(PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                    .build()
-            )
-        }
-        mediaSession.isActive = true
-
-        // Register receiver for screen off events
-        val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
-        registerReceiver(screenOffReceiver, filter)
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        MediaButtonReceiver.handleIntent(mediaSession, intent)
-        return super.onStartCommand(intent, flags, startId)
     }
 
     // --- Public API for the ViewModel ---
@@ -122,13 +91,13 @@ class TimerService : Service() {
     }
 
     fun startTimer() {
-        if (!_isDirty.value) {
-             setTimerFromInputs()
+        if (_isDirty.value) {
+            setTimerFromInputs()
         }
         if (_isRunning.value || _remainingTime.value <= 0) return
 
         _isRunning.value = true
-        startForeground(NOTIFICATION_ID, createNotification())
+        updateNotification()
 
         timerJob = serviceScope.launch {
             while (_remainingTime.value > 0) {
@@ -148,25 +117,7 @@ class TimerService : Service() {
         _seconds.value = "0"
         _isDirty.value = false
         setTimerFromInputs()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-    }
-
-    // --- MediaSession Callback ---
-    private val mediaSessionCallback = object : MediaSessionCompat.Callback() {
-        override fun onPlay() {
-            val now = System.currentTimeMillis()
-            if (now - lastClickTimestamp < doubleClickThreshold) {
-                // Double-click detected
-                resetToDefault()
-            } else {
-                startTimer()
-            }
-            lastClickTimestamp = now
-        }
-
-        override fun onPause() {
-            resetToDefault()
-        }
+        updateNotification()
     }
 
     // --- Notification ---
@@ -183,7 +134,7 @@ class TimerService : Service() {
     }
 
     private fun createNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle("Timer Running")
+        .setContentTitle(if (isRunning.value) "Timer Running" else "Simple Timer")
         .setContentText("Time: ${formatTime(remainingTime.value)}")
         .setSmallIcon(R.drawable.ic_launcher_foreground) // Replace with a real icon
         .setOnlyAlertOnce(true)
@@ -204,8 +155,6 @@ class TimerService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         timerJob?.cancel()
-        mediaSession.release()
-        unregisterReceiver(screenOffReceiver) // Unregister receiver
     }
 
     companion object {

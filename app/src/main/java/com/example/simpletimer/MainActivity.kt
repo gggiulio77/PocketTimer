@@ -1,12 +1,18 @@
 package com.example.simpletimer
 
 import android.Manifest
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +29,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,8 +40,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import com.example.simpletimer.ui.theme.SimpleTimerTheme
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -43,6 +56,7 @@ class MainActivity : ComponentActivity() {
         // Handle permission grant or denial
     }
 
+    @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -60,26 +74,57 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        startService(Intent(this, PlaybackService::class.java))
+        startService(Intent(this, TimerService::class.java))
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
-fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel = viewModel()) {
+fun TimerScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    var timerService by remember { mutableStateOf<TimerService?>(null) }
+    val serviceConnection = remember {
+        object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as TimerService.TimerBinder
+                timerService = binder.getService()
+            }
 
-    DisposableEffect(Unit) {
-        timerViewModel.bindService(context)
-        onDispose {
-            timerViewModel.unbindService(context)
+            override fun onServiceDisconnected(name: ComponentName?) {
+                timerService = null
+            }
         }
     }
 
-    val minutes by timerViewModel.minutes.collectAsState()
-    val seconds by timerViewModel.seconds.collectAsState()
+    var mediaController by remember { mutableStateOf<MediaController?>(null) }
 
-    val remainingTime by timerViewModel.remainingTime.collectAsState()
-    val isRunning by timerViewModel.isRunning.collectAsState()
-    val isDirty by timerViewModel.isDirty.collectAsState()
+    DisposableEffect(context) {
+        val intent = Intent(context, TimerService::class.java)
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+
+        val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+        val controllerFuture: ListenableFuture<MediaController> =
+            MediaController.Builder(context, sessionToken).buildAsync()
+        controllerFuture.addListener(
+            {
+                mediaController = controllerFuture.get()
+            },
+            MoreExecutors.directExecutor()
+        )
+
+
+        onDispose {
+            context.unbindService(serviceConnection)
+            mediaController?.release()
+        }
+    }
+
+    val minutes = timerService?.minutes?.collectAsState()?.value ?: ""
+    val seconds = timerService?.seconds?.collectAsState()?.value ?: ""
+    val remainingTime = timerService?.remainingTime?.collectAsState()?.value ?: 0L
+    val isRunning = timerService?.isRunning?.collectAsState()?.value ?: false
+    val isDirty = timerService?.isDirty?.collectAsState()?.value ?: false
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -89,7 +134,7 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel = 
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextField(
                 value = minutes,
-                onValueChange = { timerViewModel.onMinutesChanged(it) },
+                onValueChange = { timerService?.onMinutesChanged(it) },
                 modifier = Modifier.width(70.dp),
                 label = { Text("MM") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -98,14 +143,14 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel = 
             Spacer(modifier = Modifier.width(8.dp))
             TextField(
                 value = seconds,
-                onValueChange = { timerViewModel.onSecondsChanged(it) },
+                onValueChange = { timerService?.onSecondsChanged(it) },
                 modifier = Modifier.width(70.dp),
                 label = { Text("SS") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 enabled = !isRunning
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { timerViewModel.setTimer() }, enabled = isDirty && !isRunning) {
+            Button(onClick = { timerService?.setTimerFromInputs() }, enabled = isDirty && !isRunning) {
                 Text(text = "Set")
             }
         }
@@ -117,13 +162,16 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel = 
         Spacer(modifier = Modifier.padding(16.dp))
         Row {
             Button(
-                onClick = { timerViewModel.startTimer() },
+                onClick = {
+                    timerService?.startTimer()
+                    mediaController?.play()
+                },
                 enabled = !isRunning
             ) {
                 Text(text = "Start")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { timerViewModel.resetToDefault() }) {
+            Button(onClick = { timerService?.resetToDefault() }) {
                 Text(text = "Reset")
             }
         }
