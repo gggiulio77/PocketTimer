@@ -47,6 +47,14 @@ class TimerService : Service() {
 
     override fun onBind(intent: Intent): IBinder = binder
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START -> startTimer()
+            ACTION_RESET -> resetToDefault()
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -153,5 +161,7 @@ class TimerService : Service() {
     companion object {
         const val CHANNEL_ID = "TimerServiceChannel"
         const val NOTIFICATION_ID = 1
+        const val ACTION_START = "com.example.simpletimer.START"
+        const val ACTION_RESET = "com.example.simpletimer.RESET"
     }
 }
