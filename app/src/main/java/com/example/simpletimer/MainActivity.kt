@@ -1,17 +1,17 @@
 package com.example.simpletimer
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -56,6 +56,8 @@ class MainActivity : ComponentActivity() {
         // Handle permission grant or denial
     }
 
+    private val timerViewModel: TimerViewModel by viewModels()
+
     @OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,42 +69,39 @@ class MainActivity : ComponentActivity() {
             requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
+        // Start services to ensure they are running for background playback
+        startService(Intent(this, PlaybackService::class.java))
+        startService(Intent(this, TimerService::class.java))
+
         setContent {
             SimpleTimerTheme {
+                // Use DisposableEffect to bind and unbind the ViewModel to the service
+                DisposableEffect(Unit) {
+                    timerViewModel.bindService(this@MainActivity)
+                    onDispose {
+                        timerViewModel.unbindService(this@MainActivity)
+                    }
+                }
+
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    TimerScreen(modifier = Modifier.padding(innerPadding))
+                    TimerScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        viewModel = timerViewModel
+                    )
                 }
             }
         }
-        startService(Intent(this, PlaybackService::class.java))
-        startService(Intent(this, TimerService::class.java))
     }
 }
 
 @OptIn(UnstableApi::class)
 @Composable
-fun TimerScreen(modifier: Modifier = Modifier) {
+fun TimerScreen(modifier: Modifier = Modifier, viewModel: TimerViewModel) {
     val context = LocalContext.current
-    var timerService by remember { mutableStateOf<TimerService?>(null) }
-    val serviceConnection = remember {
-        object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                val binder = service as TimerService.TimerBinder
-                timerService = binder.getService()
-            }
-
-            override fun onServiceDisconnected(name: ComponentName?) {
-                timerService = null
-            }
-        }
-    }
-
     var mediaController by remember { mutableStateOf<MediaController?>(null) }
 
+    // This effect handles the connection to the MediaController for playback commands
     DisposableEffect(context) {
-        val intent = Intent(context, TimerService::class.java)
-        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
-
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val controllerFuture: ListenableFuture<MediaController> =
             MediaController.Builder(context, sessionToken).buildAsync()
@@ -113,18 +112,17 @@ fun TimerScreen(modifier: Modifier = Modifier) {
             MoreExecutors.directExecutor()
         )
 
-
         onDispose {
-            context.unbindService(serviceConnection)
             mediaController?.release()
         }
     }
 
-    val minutes = timerService?.minutes?.collectAsState()?.value ?: ""
-    val seconds = timerService?.seconds?.collectAsState()?.value ?: ""
-    val remainingTime = timerService?.remainingTime?.collectAsState()?.value ?: 0L
-    val isRunning = timerService?.isRunning?.collectAsState()?.value ?: false
-    val isDirty = timerService?.isDirty?.collectAsState()?.value ?: false
+    // Collect state directly from the ViewModel
+    val minutes by viewModel.minutes.collectAsState()
+    val seconds by viewModel.seconds.collectAsState()
+    val remainingTime by viewModel.remainingTime.collectAsState()
+    val isRunning by viewModel.isRunning.collectAsState()
+    val isDirty by viewModel.isDirty.collectAsState()
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -134,7 +132,7 @@ fun TimerScreen(modifier: Modifier = Modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextField(
                 value = minutes,
-                onValueChange = { timerService?.onMinutesChanged(it) },
+                onValueChange = { viewModel.onMinutesChanged(it) },
                 modifier = Modifier.width(70.dp),
                 label = { Text("MM") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -143,27 +141,27 @@ fun TimerScreen(modifier: Modifier = Modifier) {
             Spacer(modifier = Modifier.width(8.dp))
             TextField(
                 value = seconds,
-                onValueChange = { timerService?.onSecondsChanged(it) },
+                onValueChange = { viewModel.onSecondsChanged(it) },
                 modifier = Modifier.width(70.dp),
                 label = { Text("SS") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 enabled = !isRunning
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { timerService?.setTimerFromInputs() }, enabled = isDirty && !isRunning) {
+            Button(onClick = { viewModel.setTimer() }, enabled = isDirty && !isRunning) {
                 Text(text = "Set")
             }
         }
         Spacer(modifier = Modifier.padding(16.dp))
         Text(
             text = formatTime(remainingTime),
-            fontSize = 48.sp // Make timer text larger
+            fontSize = 48.sp
         )
         Spacer(modifier = Modifier.padding(16.dp))
         Row {
             Button(
                 onClick = {
-                    timerService?.startTimer()
+                    viewModel.startTimer()
                     mediaController?.play()
                 },
                 enabled = !isRunning
@@ -171,7 +169,7 @@ fun TimerScreen(modifier: Modifier = Modifier) {
                 Text(text = "Start")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = { timerService?.resetToDefault() }) {
+            Button(onClick = { viewModel.resetToDefault() }) {
                 Text(text = "Reset")
             }
         }
@@ -185,11 +183,12 @@ fun formatTime(timeInMillis: Long): String {
     return String.format(Locale.US, "%02d:%02d", m, s)
 }
 
-
+@SuppressLint("ViewModelConstructorInComposable")
 @Preview(showBackground = true)
 @Composable
 fun TimerScreenPreview() {
     SimpleTimerTheme {
-        TimerScreen()
+        // The preview will use a dummy ViewModel and will not have functional logic
+        TimerScreen(viewModel = TimerViewModel())
     }
 }
