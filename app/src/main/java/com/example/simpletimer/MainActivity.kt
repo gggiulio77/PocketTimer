@@ -1,8 +1,11 @@
 package com.example.simpletimer
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -127,7 +130,24 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel = 
                 Text(text = "Reset")
             }
         }
+        Spacer(modifier = Modifier.padding(16.dp))
+        if (!isNotificationListenerEnabled(context)) {
+            Button(onClick = { openNotificationListenerSettings(context) }) {
+                Text(text = "Enable Media Observer")
+            }
+        }
     }
+}
+
+private fun isNotificationListenerEnabled(context: Context): Boolean {
+    val enabledListeners = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+    val componentName = "com.example.simpletimer/com.example.simpletimer.MediaSessionObserverService"
+    return enabledListeners?.contains(componentName) == true
+}
+
+private fun openNotificationListenerSettings(context: Context) {
+    val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+    context.startActivity(intent)
 }
 
 fun formatTime(timeInMillis: Long): String {
