@@ -107,6 +107,10 @@ class TimerService : Service() {
             // Timer finished normally
             _isRunning.value = false
             stopForeground(STOP_FOREGROUND_REMOVE)
+
+            val soundIntent = Intent(this@TimerService, SoundService::class.java)
+            startService(soundIntent)
+            setTimerFromInputs()
         }
     }
 
