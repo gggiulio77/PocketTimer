@@ -1,6 +1,7 @@
 package com.example.simpletimer
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -24,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -74,6 +76,17 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel = 
         timerViewModel.bindService(context)
         onDispose {
             timerViewModel.unbindService(context)
+        }
+    }
+
+    // --- Exact Alarm Permission Check ---
+    LaunchedEffect(Unit) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (!alarmManager.canScheduleExactAlarms()) {
+            Intent().also {
+                it.action = Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
+                context.startActivity(it)
+            }
         }
     }
 

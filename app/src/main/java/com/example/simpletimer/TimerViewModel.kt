@@ -82,7 +82,7 @@ class TimerViewModel : ViewModel() {
     }
 
     fun setTimer() {
-        timerService?.setTimerFromInputs()
+        timerService?.setTimer()
     }
 
     fun startTimer() {
@@ -90,6 +90,6 @@ class TimerViewModel : ViewModel() {
     }
 
     fun resetToDefault() {
-        timerService?.stopAndResetToSetTime()
+        timerService?.resetToDefault()
     }
 }

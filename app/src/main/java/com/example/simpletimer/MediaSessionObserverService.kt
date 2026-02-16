@@ -94,7 +94,10 @@ class MediaSessionObserverService : NotificationListenerService() {
                         if (lastMetadata != null && (newTitle != lastTitle || newArtist != lastArtist || newAlbum != lastAlbum)) {
                             Log.d("MediaSessionObserver", "Metadata changed for ${controller.packageName}. Starting timer.")
                             // Assuming startTimer() resets the timer if it's already running.
-                            timerService?.startTimer()
+                            val intent = Intent(this@MediaSessionObserverService, TimerService::class.java)
+                            intent.action = TimerService.ACTION_START_TIMER
+                            startForegroundService(intent)
+
                         }
                         lastMetadata = metadata
                     }

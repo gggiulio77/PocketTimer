@@ -1,12 +1,19 @@
 package com.example.simpletimer
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Binder
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,21 +25,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-class TimerService : Service() {
+class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private val binder = TimerBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main)
-    private var timerJob: Job? = null
+    private var uiUpdateJob: Job? = null
 
-    // --- State and Logic ---
+    // --- Sound & Alarm Components ---
+    private lateinit var audioManager: AudioManager
+    private var mediaPlayer: MediaPlayer? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private lateinit var alarmManager: AlarmManager
+    private lateinit var alarmIntent: PendingIntent
+    private var focusRequest: AudioFocusRequest? = null // Use modern request
+
+    // --- State Management ---
     private val _remainingTime = MutableStateFlow(0L)
     val remainingTime: StateFlow<Long> = _remainingTime.asStateFlow()
 
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
-
-    private val _isDirty = MutableStateFlow(false)
-    val isDirty: StateFlow<Boolean> = _isDirty.asStateFlow()
 
     private val _minutes = MutableStateFlow("")
     val minutes: StateFlow<String> = _minutes.asStateFlow()
@@ -40,7 +52,9 @@ class TimerService : Service() {
     private val _seconds = MutableStateFlow("")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    // --- Service Lifecycle ---
+    private val _isDirty = MutableStateFlow(false)
+    val isDirty: StateFlow<Boolean> = _isDirty.asStateFlow()
+
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
@@ -50,33 +64,53 @@ class TimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+
+        // --- Initialize Components ---
+        audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SimpleTimer:TimerWakeLock")
+
+        // Create a single, reusable PendingIntent for the alarm
+        val intent = Intent(this, TimerService::class.java).apply { action = ACTION_PLAY_SOUND }
+        alarmIntent = PendingIntent.getService(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
         resetToDefault()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+
+        when (intent?.action) {
+
+            ACTION_START_TIMER -> {
+                startTimer()
+            }
+
+            ACTION_PLAY_SOUND -> {
+                _isRunning.value = false
+                startForeground(NOTIFICATION_ID, createNotification("Timer Finished"))
+                playSound()
+            }
+        }
+
+        return START_NOT_STICKY
     }
 
     // --- Public API for the ViewModel ---
     fun onMinutesChanged(newMinutes: String) {
         val filtered = newMinutes.filter { it.isDigit() }
-        val value = filtered.toIntOrNull()
-        if (value != null && value > 59) {
-            _minutes.value = "59"
-        } else {
-            _minutes.value = filtered
-        }
+        _minutes.value = if ((filtered.toIntOrNull() ?: 0) > 59) "59" else filtered
         _isDirty.value = true
     }
 
     fun onSecondsChanged(newSeconds: String) {
         val filtered = newSeconds.filter { it.isDigit() }
-        val value = filtered.toIntOrNull()
-        if (value != null && value > 59) {
-            _seconds.value = "59"
-        } else {
-            _seconds.value = filtered
-        }
+        _seconds.value = if ((filtered.toIntOrNull() ?: 0) > 59) "59" else filtered
         _isDirty.value = true
     }
 
-    fun setTimerFromInputs() {
+    fun setTimer() {
         val m = _minutes.value.toLongOrNull() ?: 0
         val s = _seconds.value.toLongOrNull() ?: 0
         _remainingTime.value = (m * 60 + s) * 1000
@@ -84,76 +118,103 @@ class TimerService : Service() {
     }
 
     fun startTimer() {
-        if (_isRunning.value) {
-            // If timer is running and a song changes, stop and reset to set time.
-            stopAndResetToSetTime()
+        // --- This is now a true "restart" function ---
+        cancelTimerInternals()
+        setTimer()
+
+        if (_remainingTime.value <= 0) {
+            _isRunning.value = false
             return
         }
 
-        // This is a fresh start, either from UI or for the first time.
-        setTimerFromInputs()
+        val triggerAtMillis = System.currentTimeMillis() + _remainingTime.value
 
-        if (_remainingTime.value <= 0) return
+        try {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, alarmIntent)
+        } catch (_: SecurityException) {
+            _isRunning.value = false
+            return
+        }
 
         _isRunning.value = true
-        startForeground(NOTIFICATION_ID, createNotification())
+        startForeground(NOTIFICATION_ID, createNotification("Timer Running"))
 
-        timerJob = serviceScope.launch {
-            while (_remainingTime.value > 0) {
+        // --- Coroutine for UI updates ONLY ---
+        uiUpdateJob = serviceScope.launch {
+            while (_remainingTime.value > 1000) {
                 delay(1000)
                 _remainingTime.value -= 1000
-                updateNotification()
+                updateNotification("Timer Running")
             }
-            // Timer finished normally
-            _isRunning.value = false
-            stopForeground(STOP_FOREGROUND_REMOVE)
-
-            val soundIntent = Intent(this@TimerService, SoundService::class.java)
-            startService(soundIntent)
-            setTimerFromInputs()
         }
     }
 
-    fun stopAndResetToSetTime() {
-        timerJob?.cancel()
-        _isRunning.value = false
-        setTimerFromInputs() // Resets timer to the value in the text fields
+    private fun cancelTimerInternals() {
+        alarmManager.cancel(alarmIntent)
+        uiUpdateJob?.cancel()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     fun resetToDefault() {
-        timerJob?.cancel()
-        _isRunning.value = false
+        cancelTimerInternals()
         _minutes.value = "2"
         _seconds.value = "0"
-        _isDirty.value = false
-        setTimerFromInputs()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        setTimer()
+        _isRunning.value = false
     }
+
+    // --- Sound Playback ---
+    private fun playSound() {
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+
+        wakeLock?.acquire(10_000)
+
+        val afd = resources.openRawResourceFd(R.raw.beep)
+
+        mediaPlayer = MediaPlayer().apply {
+            setAudioAttributes(audioAttributes)
+            setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+            setOnCompletionListener { finishAndReset() }
+            setOnErrorListener { _, _, _ -> finishAndReset(); true }
+            prepare()
+            start()
+        }
+
+        afd.close()
+    }
+
+    private fun finishAndReset() {
+        mediaPlayer?.release()
+        mediaPlayer = null
+        if (wakeLock?.isHeld == true) wakeLock?.release()
+        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        setTimer() // Reset timer display to the configured time
+        _isRunning.value = false // CRITICAL: Ensure the start button is re-enabled
+    }
+
+    override fun onAudioFocusChange(focusChange: Int) { /* No-op */ }
 
     // --- Notification ---
     private fun createNotificationChannel() {
-        val name = "Timer Service Channel"
-        val descriptionText = "Channel for Timer Foreground Service"
-        val importance = NotificationManager.IMPORTANCE_LOW
-        val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-            description = descriptionText
-        }
-        val notificationManager: NotificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
+        val channel = NotificationChannel(CHANNEL_ID, "Timer Service Channel", NotificationManager.IMPORTANCE_HIGH)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(channel)
     }
 
-    private fun createNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle("Timer Running")
+    private fun createNotification(title: String) = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setContentTitle(title)
         .setContentText("Time: ${formatTime(remainingTime.value)}")
-        .setSmallIcon(R.drawable.ic_launcher_foreground) // Replace with a real icon
+        .setSmallIcon(R.drawable.ic_launcher_foreground)
         .setOnlyAlertOnce(true)
         .build()
 
-    private fun updateNotification() {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID, createNotification())
+    private fun updateNotification(title: String) {
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NOTIFICATION_ID, createNotification(title))
     }
 
     private fun formatTime(timeInMillis: Long): String {
@@ -165,11 +226,15 @@ class TimerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        timerJob?.cancel()
+        cancelTimerInternals()
+        mediaPlayer?.release()
+        if (wakeLock?.isHeld == true) wakeLock?.release()
     }
 
     companion object {
         const val CHANNEL_ID = "TimerServiceChannel"
         const val NOTIFICATION_ID = 1
+        const val ACTION_PLAY_SOUND = "com.example.simpletimer.PLAY_SOUND"
+        const val ACTION_START_TIMER = "com.example.simpletimer.START_TIMER"
     }
 }
