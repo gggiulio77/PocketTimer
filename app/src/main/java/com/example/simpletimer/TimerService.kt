@@ -141,7 +141,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
         // --- Coroutine for UI updates ONLY ---
         uiUpdateJob = serviceScope.launch {
-            while (_remainingTime.value > 1000) {
+            while (_remainingTime.value > 0) {
                 delay(1000)
                 _remainingTime.value -= 1000
                 updateNotification("Timer Running")
@@ -218,7 +218,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun formatTime(timeInMillis: Long): String {
-        val totalSeconds = timeInMillis / 1000
+        val totalSeconds = (timeInMillis + 999) / 1000
         val m = (totalSeconds % 3600) / 60
         val s = totalSeconds % 60
         return String.format(Locale.US, "%02d:%02d", m, s)
