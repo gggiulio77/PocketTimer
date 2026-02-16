@@ -3,132 +3,216 @@ package com.example.simpletimer
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.IBinder
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.util.Log
 
 class MediaSessionObserverService : NotificationListenerService() {
 
+    companion object {
+        private const val TAG = "MediaSessionObserver"
+
+        // How close to the end we consider a "natural ending"
+        private const val END_THRESHOLD_MS = 15000L
+
+        // Prevent duplicate triggers
+        private const val SKIP_DEBOUNCE_MS = 1500L
+    }
+
     private lateinit var mediaSessionManager: MediaSessionManager
-    private val activeMediaControllers = mutableMapOf<MediaController, MediaController.Callback>()
     private lateinit var componentName: ComponentName
 
-    private var timerService: TimerService? = null
-    private var isTimerServiceBound = false
+    private val activeControllers =
+        mutableMapOf<MediaController, MediaController.Callback>()
 
-    private val timerServiceConnection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            val binder = service as TimerService.TimerBinder
-            timerService = binder.getService()
-            isTimerServiceBound = true
-        }
-
-        override fun onServiceDisconnected(arg0: ComponentName) {
-            isTimerServiceBound = false
-        }
-    }
-
-    private val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-        Log.d("MediaSessionObserver", "Active sessions changed. Found ${controllers?.size ?: 0} sessions.")
-        updateMediaControllers(controllers)
-    }
+    private var lastSkipTriggerTime = 0L
 
     override fun onCreate() {
         super.onCreate()
-        mediaSessionManager = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+        mediaSessionManager =
+            getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
         componentName = ComponentName(this, this.javaClass)
-        Intent(this, TimerService::class.java).also { intent ->
-            bindService(intent, timerServiceConnection, Context.BIND_AUTO_CREATE)
-        }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.d("MediaSessionObserver", "Notification Listener connected. Your breakpoints should now be hit.")
         try {
-            mediaSessionManager.addOnActiveSessionsChangedListener(sessionListener, componentName)
-            // Also process existing sessions
-            updateMediaControllers(mediaSessionManager.getActiveSessions(componentName))
+            mediaSessionManager.addOnActiveSessionsChangedListener(
+                sessionListener,
+                componentName
+            )
+            updateControllers(
+                mediaSessionManager.getActiveSessions(componentName)
+            )
         } catch (e: SecurityException) {
-            Log.e("MediaSessionObserver", "Failed to add listener, missing permission?", e)
+            Log.e(TAG, "Missing notification access permission", e)
         }
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.d("MediaSessionObserver", "Notification Listener disconnected.")
         mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener)
     }
 
-    private fun updateMediaControllers(controllers: List<MediaController>?) {
-        val activeControllers = controllers?.toSet() ?: emptySet()
-        val controllersToRemove = activeMediaControllers.keys.filterNot { it in activeControllers }
-        controllersToRemove.forEach { controller ->
-            Log.d("MediaSessionObserver", "Unregistering callback for ${controller.packageName}")
-            val callback = activeMediaControllers.remove(controller)
-            callback?.let { controller.unregisterCallback(it) }
+    private val sessionListener =
+        MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+            updateControllers(controllers)
         }
 
+    private fun updateControllers(controllers: List<MediaController>?) {
+        val active = controllers?.toSet() ?: emptySet()
+
+        // Remove stale
+        val toRemove = activeControllers.keys.filterNot { it in active }
+        toRemove.forEach {
+            activeControllers[it]?.let { cb -> it.unregisterCallback(cb) }
+            activeControllers.remove(it)
+        }
+
+        // Add new
         controllers?.forEach { controller ->
-            if (!activeMediaControllers.containsKey(controller)) {
-                Log.d("MediaSessionObserver", "Registering callback for ${controller.packageName}")
-                val callback = object : MediaController.Callback() {
-                    private var lastMetadata: MediaMetadata? = null
-
-                    override fun onMetadataChanged(metadata: MediaMetadata?) {
-                        super.onMetadataChanged(metadata)
-
-                        val newTitle = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-                        val newArtist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                        val newAlbum = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
-
-                        val lastTitle = lastMetadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-                        val lastArtist = lastMetadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                        val lastAlbum = lastMetadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
-
-                        // We check for lastMetadata not to be null, to avoid triggering the timer when switching apps.
-                        if (lastMetadata != null && (newTitle != lastTitle || newArtist != lastArtist || newAlbum != lastAlbum)) {
-                            Log.d("MediaSessionObserver", "Metadata changed for ${controller.packageName}. Starting timer.")
-                            // Assuming startTimer() resets the timer if it's already running.
-                            val intent = Intent(this@MediaSessionObserverService, TimerService::class.java)
-                            intent.action = TimerService.ACTION_START_TIMER
-                            startForegroundService(intent)
-
-                        }
-                        lastMetadata = metadata
-                    }
-                }
+            if (!activeControllers.containsKey(controller)) {
+                val callback = createCallback(controller)
                 controller.registerCallback(callback)
-                activeMediaControllers[controller] = callback
+                activeControllers[controller] = callback
             }
         }
     }
-    
+
+    private fun createCallback(controller: MediaController)
+            : MediaController.Callback {
+
+        return object : MediaController.Callback() {
+
+            private var lastSnapshot: TrackSnapshot? = null
+
+            override fun onPlaybackStateChanged(state: PlaybackState?) {
+                if (state == null) return
+
+                val metadata = controller.metadata
+
+                lastSnapshot = TrackSnapshot(
+                    mediaId = extractMediaId(metadata),
+                    duration = metadata?.getLong(
+                        MediaMetadata.METADATA_KEY_DURATION
+                    ) ?: 0L,
+                    lastPosition = state.position,
+                    lastState = state.state,
+                    stateUpdateTime = state.lastPositionUpdateTime
+                )
+            }
+
+            override fun onMetadataChanged(metadata: MediaMetadata?) {
+                val newMediaId = extractMediaId(metadata)
+                val previous = lastSnapshot ?: run {
+                    // First track — just initialize
+                    lastSnapshot = TrackSnapshot(
+                        mediaId = newMediaId,
+                        duration = metadata?.getLong(
+                            MediaMetadata.METADATA_KEY_DURATION
+                        ) ?: 0L,
+                        lastPosition = 0L,
+                        lastState = PlaybackState.STATE_NONE,
+                        stateUpdateTime = SystemClock.elapsedRealtime()
+                    )
+                    return
+                }
+
+                // Same track → ignore
+                if (previous.mediaId == newMediaId) return
+
+                val now = SystemClock.elapsedRealtime()
+
+                val realPosition = computeRealPosition(previous, now)
+
+                val isNaturalEnd =
+                    previous.duration > 0 &&
+                            realPosition >=
+                            previous.duration - END_THRESHOLD_MS
+
+                if (!isNaturalEnd) {
+                    maybeTriggerSkip(now)
+                }
+
+                // Update snapshot to new track
+                lastSnapshot = TrackSnapshot(
+                    mediaId = newMediaId,
+                    duration = metadata?.getLong(
+                        MediaMetadata.METADATA_KEY_DURATION
+                    ) ?: 0L,
+                    lastPosition = 0L,
+                    lastState = PlaybackState.STATE_NONE,
+                    stateUpdateTime = now
+                )
+            }
+        }
+    }
+
+    private fun computeRealPosition(
+        snapshot: TrackSnapshot,
+        now: Long
+    ): Long {
+
+        return if (snapshot.lastState == PlaybackState.STATE_PLAYING) {
+            val delta = now - snapshot.stateUpdateTime
+            snapshot.lastPosition + delta
+        } else {
+            snapshot.lastPosition
+        }
+    }
+
+    private fun maybeTriggerSkip(now: Long) {
+        if (now - lastSkipTriggerTime < SKIP_DEBOUNCE_MS) {
+            return
+        }
+
+        lastSkipTriggerTime = now
+        Log.d(TAG, "User skip inferred → starting timer")
+        startTimer()
+    }
+
+    private fun extractMediaId(metadata: MediaMetadata?): String? {
+        return metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+            ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+    }
+
+    private fun startTimer() {
+        val intent = Intent(
+            this,
+            TimerService::class.java
+        ).apply {
+            action = TimerService.ACTION_START_TIMER
+        }
+        startForegroundService(intent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        activeMediaControllers.forEach { (controller, callback) ->
+        activeControllers.forEach { (controller, callback) ->
             controller.unregisterCallback(callback)
         }
-        if (isTimerServiceBound) {
-            unbindService(timerServiceConnection)
-            isTimerServiceBound = false
-        }
-        try {
-            mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener)
-        } catch (e: Exception) {
-            // Ignore
-        }
+        mediaSessionManager.removeOnActiveSessionsChangedListener(
+            sessionListener
+        )
     }
 
     override fun onBind(intent: Intent?): IBinder? {
         return if (intent?.action == SERVICE_INTERFACE) {
             super.onBind(intent)
-        } else {
-            null
-        }
+        } else null
     }
 }
+
+private data class TrackSnapshot(
+    val mediaId: String?,
+    val duration: Long,
+    val lastPosition: Long,
+    val lastState: Int,
+    val stateUpdateTime: Long
+)
