@@ -27,15 +27,13 @@ class MediaSessionObserverService : NotificationListenerService() {
     private lateinit var mediaSessionManager: MediaSessionManager
     private lateinit var componentName: ComponentName
 
-    private val activeControllers =
-        mutableMapOf<MediaController, MediaController.Callback>()
+    private val activeControllers = mutableMapOf<MediaController, MediaController.Callback>()
 
     private var lastSkipTriggerTime = 0L
 
     override fun onCreate() {
         super.onCreate()
-        mediaSessionManager =
-            getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+        mediaSessionManager = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
         componentName = ComponentName(this, this.javaClass)
     }
 
@@ -43,8 +41,7 @@ class MediaSessionObserverService : NotificationListenerService() {
         super.onListenerConnected()
         try {
             mediaSessionManager.addOnActiveSessionsChangedListener(
-                sessionListener,
-                componentName
+                sessionListener, componentName
             )
             updateControllers(
                 mediaSessionManager.getActiveSessions(componentName)
@@ -84,8 +81,7 @@ class MediaSessionObserverService : NotificationListenerService() {
         }
     }
 
-    private fun createCallback(controller: MediaController)
-            : MediaController.Callback {
+    private fun createCallback(controller: MediaController): MediaController.Callback {
 
         return object : MediaController.Callback() {
 
@@ -97,9 +93,7 @@ class MediaSessionObserverService : NotificationListenerService() {
                 val metadata = controller.metadata
                 val now = SystemClock.elapsedRealtime()
 
-                if (lastSnapshot?.lastState == PlaybackState.STATE_PAUSED &&
-                    state.state == PlaybackState.STATE_PLAYING
-                ) {
+                if (lastSnapshot?.lastState == PlaybackState.STATE_PAUSED && state.state == PlaybackState.STATE_PLAYING) {
                     val timeSincePause = now - (lastSnapshot?.stateUpdateTime ?: 0)
                     if (timeSincePause < PAUSE_PLAY_THRESHOLD_MS) {
                         maybeTriggerSkip(now)
@@ -166,15 +160,14 @@ class MediaSessionObserverService : NotificationListenerService() {
     }
 
     private fun extractMediaId(metadata: MediaMetadata?): String? {
-        return metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
-            ?: metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
-            ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+        return metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID) ?: metadata?.getString(
+            MediaMetadata.METADATA_KEY_MEDIA_URI
+        ) ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
     }
 
     private fun startTimer() {
         val intent = Intent(
-            this,
-            TimerService::class.java
+            this, TimerService::class.java
         ).apply {
             action = TimerService.ACTION_START_TIMER
         }

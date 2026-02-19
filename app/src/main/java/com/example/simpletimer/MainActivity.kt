@@ -172,9 +172,17 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
             } else {
                 // --- Timer Picker View ---
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    NumberPicker(value = minutes.toIntOrNull() ?: 0, onValueChange = { timerViewModel.onMinutesChanged(it.toString()) }, range = 0..59)
+                    NumberPicker(
+                        value = minutes.toIntOrNull() ?: 0,
+                        onValueChange = { timerViewModel.onMinutesChanged(it.toString()) },
+                        range = 0..59
+                    )
                     Text(text = ":", fontSize = 32.sp, color = Color.White)
-                    NumberPicker(value = seconds.toIntOrNull() ?: 0, onValueChange = { timerViewModel.onSecondsChanged(it.toString()) }, range = 0..59)
+                    NumberPicker(
+                        value = seconds.toIntOrNull() ?: 0,
+                        onValueChange = { timerViewModel.onSecondsChanged(it.toString()) },
+                        range = 0..59
+                    )
                 }
             }
         }
@@ -217,7 +225,8 @@ fun NumberPicker(
     val items = remember { range.toList() }
     val itemHeight = 72.dp
     val visibleItemsCount = 3
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = items.indexOf(value).coerceAtLeast(0))
+    val listState =
+        rememberLazyListState(initialFirstVisibleItemIndex = items.indexOf(value).coerceAtLeast(0))
 
     val centralItemIndex by remember {
         derivedStateOf {
@@ -226,8 +235,10 @@ fun NumberPicker(
             if (visibleItems.isEmpty()) {
                 -1
             } else {
-                val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
-                visibleItems.minByOrNull { abs((it.offset + it.size / 2) - viewportCenter) }?.index ?: -1
+                val viewportCenter =
+                    (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2
+                visibleItems.minByOrNull { abs((it.offset + it.size / 2) - viewportCenter) }?.index
+                    ?: -1
             }
         }
     }
@@ -239,13 +250,16 @@ fun NumberPicker(
         }
     }
 
-    Box(modifier = modifier.height(itemHeight * visibleItemsCount).width(120.dp)) {
+    Box(
+        modifier = modifier
+            .height(itemHeight * visibleItemsCount)
+            .width(120.dp)
+    ) {
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(vertical = itemHeight * (visibleItemsCount / 2))
         ) {
-            items(items.size) {
-                index ->
+            items(items.size) { index ->
                 Box(
                     modifier = Modifier
                         .height(itemHeight)
@@ -286,8 +300,10 @@ private fun PermissionButton(
 }
 
 private fun isNotificationListenerEnabled(context: Context): Boolean {
-    val enabledListeners = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-    val componentName = "com.example.simpletimer/com.example.simpletimer.MediaSessionObserverService"
+    val enabledListeners =
+        Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+    val componentName =
+        "com.example.simpletimer/com.example.simpletimer.MediaSessionObserverService"
     return enabledListeners?.contains(componentName) == true
 }
 

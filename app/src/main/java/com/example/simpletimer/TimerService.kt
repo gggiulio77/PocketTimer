@@ -71,7 +71,8 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SimpleTimer:TimerWakeLock")
+        wakeLock =
+            powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SimpleTimer:TimerWakeLock")
 
         // Create a single, reusable PendingIntent for the alarm
         val intent = Intent(this, TimerService::class.java).apply { action = ACTION_PLAY_SOUND }
@@ -143,7 +144,9 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         val triggerAtMillis = System.currentTimeMillis() + _remainingTime.value
 
         try {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, alarmIntent)
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP, triggerAtMillis, alarmIntent
+            )
         } catch (_: SecurityException) {
             _isRunning.value = false
             return
@@ -184,10 +187,8 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     // --- Sound Playback ---
     private fun playSound() {
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
+        val audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
 
         wakeLock?.acquire(10_000)
 
@@ -215,21 +216,22 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         _isRunning.value = false // CRITICAL: Ensure the start button is re-enabled
     }
 
-    override fun onAudioFocusChange(focusChange: Int) { /* No-op */ }
+    override fun onAudioFocusChange(focusChange: Int) { /* No-op */
+    }
 
     // --- Notification ---
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "Timer Service Channel", NotificationManager.IMPORTANCE_HIGH)
+        val channel = NotificationChannel(
+            CHANNEL_ID, "Timer Service Channel", NotificationManager.IMPORTANCE_HIGH
+        )
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
     }
 
-    private fun createNotification(title: String) = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle(title)
-        .setContentText("Time: ${formatTime(remainingTime.value)}")
-        .setSmallIcon(R.drawable.ic_launcher_foreground)
-        .setOnlyAlertOnce(true)
-        .build()
+    private fun createNotification(title: String) =
+        NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(title)
+            .setContentText("Time: ${formatTime(remainingTime.value)}")
+            .setSmallIcon(R.drawable.ic_launcher_foreground).setOnlyAlertOnce(true).build()
 
     private fun updateNotification(title: String) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
