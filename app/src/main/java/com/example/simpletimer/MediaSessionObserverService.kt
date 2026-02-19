@@ -11,6 +11,8 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.util.Log
+import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
+import com.example.simpletimer.AppConstants.PREFS_NAME
 
 class MediaSessionObserverService : NotificationListenerService() {
 
@@ -180,6 +182,15 @@ class MediaSessionObserverService : NotificationListenerService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        // Stop the timer service
+        val timerIntent = Intent(this, TimerService::class.java)
+        stopService(timerIntent)
+
+        // Set the app running flag to false
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_APP_RUNNING, false).apply()
+
+        // Stop this service
         stopSelf()
     }
 

@@ -53,6 +53,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
+import com.example.simpletimer.AppConstants.PREFS_NAME
 import com.example.simpletimer.ui.theme.SimpleTimerTheme
 import java.util.Locale
 import kotlin.math.abs

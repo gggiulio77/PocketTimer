@@ -17,6 +17,10 @@ import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
+import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
+import com.example.simpletimer.AppConstants.KEY_LAST_MINUTES
+import com.example.simpletimer.AppConstants.KEY_LAST_SECONDS
+import com.example.simpletimer.AppConstants.PREFS_NAME
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -291,7 +295,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         super.onTaskRemoved(rootIntent)
         // When the app is swiped away from recents, stop the service and cancel the alarm.
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit { putBoolean(KEY_APP_RUNNING, false) }
+        prefs.edit().putBoolean(KEY_APP_RUNNING, false).apply()
         stopSelf()
     }
 
@@ -308,9 +312,5 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         const val ACTION_PLAY_SOUND = "com.example.simpletimer.PLAY_SOUND"
         const val ACTION_START_TIMER = "com.example.simpletimer.START_TIMER"
         const val ACTION_CANCEL_TIMER = "com.example.simpletimer.CANCEL_TIMER"
-        const val PREFS_NAME = "SimpleTimerPrefs"
-        const val KEY_LAST_MINUTES = "last_minutes"
-        const val KEY_LAST_SECONDS = "last_seconds"
-        const val KEY_APP_RUNNING = "app_running"
     }
 }
