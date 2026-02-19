@@ -18,7 +18,7 @@ class MediaSessionObserverService : NotificationListenerService() {
         private const val TAG = "MediaSessionObserver"
 
         // How close to the end we consider a "natural ending"
-        private const val END_THRESHOLD_MS = 15000L
+        private const val PAUSE_PLAY_THRESHOLD_MS = 1000L
 
         // Prevent duplicate triggers
         private const val SKIP_DEBOUNCE_MS = 1500L
@@ -95,6 +95,16 @@ class MediaSessionObserverService : NotificationListenerService() {
                 if (state == null) return
 
                 val metadata = controller.metadata
+                val now = SystemClock.elapsedRealtime()
+
+                if (lastSnapshot?.lastState == PlaybackState.STATE_PAUSED &&
+                    state.state == PlaybackState.STATE_PLAYING
+                ) {
+                    val timeSincePause = now - (lastSnapshot?.stateUpdateTime ?: 0)
+                    if (timeSincePause < PAUSE_PLAY_THRESHOLD_MS) {
+                        maybeTriggerSkip(now)
+                    }
+                }
 
                 lastSnapshot = TrackSnapshot(
                     mediaId = extractMediaId(metadata),
@@ -103,7 +113,7 @@ class MediaSessionObserverService : NotificationListenerService() {
                     ) ?: 0L,
                     lastPosition = state.position,
                     lastState = state.state,
-                    stateUpdateTime = state.lastPositionUpdateTime
+                    stateUpdateTime = now
                 )
             }
 
@@ -126,19 +136,6 @@ class MediaSessionObserverService : NotificationListenerService() {
                 // Same track → ignore
                 if (previous.mediaId == newMediaId) return
 
-                val now = SystemClock.elapsedRealtime()
-
-                val realPosition = computeRealPosition(previous, now)
-
-                val isNaturalEnd =
-                    previous.duration > 0 &&
-                            realPosition >=
-                            previous.duration - END_THRESHOLD_MS
-
-                if (!isNaturalEnd) {
-                    maybeTriggerSkip(now)
-                }
-
                 // Update snapshot to new track
                 lastSnapshot = TrackSnapshot(
                     mediaId = newMediaId,
@@ -147,26 +144,18 @@ class MediaSessionObserverService : NotificationListenerService() {
                     ) ?: 0L,
                     lastPosition = 0L,
                     lastState = PlaybackState.STATE_NONE,
-                    stateUpdateTime = now
+                    stateUpdateTime = SystemClock.elapsedRealtime()
                 )
             }
         }
     }
 
-    private fun computeRealPosition(
-        snapshot: TrackSnapshot,
-        now: Long
-    ): Long {
-
-        return if (snapshot.lastState == PlaybackState.STATE_PLAYING) {
-            val delta = now - snapshot.stateUpdateTime
-            snapshot.lastPosition + delta
-        } else {
-            snapshot.lastPosition
-        }
-    }
-
     private fun maybeTriggerSkip(now: Long) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val isAppRunning = prefs.getBoolean(KEY_APP_RUNNING, false)
+
+        if (!isAppRunning) return
+
         if (now - lastSkipTriggerTime < SKIP_DEBOUNCE_MS) {
             return
         }
@@ -190,6 +179,15 @@ class MediaSessionObserverService : NotificationListenerService() {
             action = TimerService.ACTION_START_TIMER
         }
         startForegroundService(intent)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        stopSelf()
     }
 
     override fun onDestroy() {
