@@ -15,6 +15,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,8 +53,8 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val _seconds = MutableStateFlow("")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    private val _isDirty = MutableStateFlow(false)
-    val isDirty: StateFlow<Boolean> = _isDirty.asStateFlow()
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
@@ -76,7 +77,12 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         val intent = Intent(this, TimerService::class.java).apply { action = ACTION_PLAY_SOUND }
         alarmIntent = PendingIntent.getService(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
-        resetToDefault()
+        // Load the last saved time
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        _minutes.value = prefs.getString(KEY_LAST_MINUTES, "2") ?: "2"
+        _seconds.value = prefs.getString(KEY_LAST_SECONDS, "0") ?: "0"
+        setTimer()
+        _isReady.value = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -105,20 +111,23 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     fun onMinutesChanged(newMinutes: String) {
         val filtered = newMinutes.filter { it.isDigit() }
         _minutes.value = if ((filtered.toIntOrNull() ?: 0) > 59) "59" else filtered
-        _isDirty.value = true
+        setTimer()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit { putString(KEY_LAST_MINUTES, _minutes.value) }
     }
 
     fun onSecondsChanged(newSeconds: String) {
         val filtered = newSeconds.filter { it.isDigit() }
         _seconds.value = if ((filtered.toIntOrNull() ?: 0) > 59) "59" else filtered
-        _isDirty.value = true
+        setTimer()
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit { putString(KEY_LAST_SECONDS, _seconds.value) }
     }
 
-    fun setTimer() {
+    private fun setTimer() {
         val m = _minutes.value.toLongOrNull() ?: 0
         val s = _seconds.value.toLongOrNull() ?: 0
         _remainingTime.value = (m * 60 + s) * 1000
-        _isDirty.value = false
     }
 
     fun startTimer() {
@@ -238,7 +247,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         super.onTaskRemoved(rootIntent)
         // When the app is swiped away from recents, stop the service and cancel the alarm.
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(KEY_APP_RUNNING, false).apply()
+        prefs.edit { putBoolean(KEY_APP_RUNNING, false) }
         stopSelf()
     }
 

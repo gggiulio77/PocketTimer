@@ -5,39 +5,43 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class TimerViewModel : ViewModel() {
 
     private var timerService: TimerService? = null
 
-    // --- Mutable State Flows for UI state ---
+    // --- UI State ---
     private val _remainingTime = MutableStateFlow(0L)
     val remainingTime: StateFlow<Long> = _remainingTime.asStateFlow()
 
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
-    private val _minutes = MutableStateFlow("2")
+    private val _minutes = MutableStateFlow("")
     val minutes: StateFlow<String> = _minutes.asStateFlow()
 
-    private val _seconds = MutableStateFlow("0")
+    private val _seconds = MutableStateFlow("")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
+
+    private val _isReady = MutableStateFlow(false)
+    val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
     fun setTimerService(service: TimerService) {
         timerService = service
-        // --- Sync ViewModel state with Service state after binding ---
         viewModelScope.launch {
-            service.remainingTime.collect { _remainingTime.value = it }
-        }
-        viewModelScope.launch {
-            service.isRunning.collect { _isRunning.value = it }
-        }
-        viewModelScope.launch {
-            service.minutes.collect { _minutes.value = it }
-        }
-        viewModelScope.launch {
-            service.seconds.collect { _seconds.value = it }
+            // Wait for the service to load its state from SharedPreferences
+            service.isReady.first { it }
+
+            // Once the service is ready, start collecting its state
+            launch { service.remainingTime.collect(_remainingTime) }
+            launch { service.isRunning.collect(_isRunning) }
+            launch { service.minutes.collect(_minutes) }
+            launch { service.seconds.collect(_seconds) }
+
+            // Signal that the ViewModel is now ready and has the correct state
+            _isReady.value = true
         }
     }
 

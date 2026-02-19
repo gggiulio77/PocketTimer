@@ -57,9 +57,6 @@ import com.example.simpletimer.ui.theme.SimpleTimerTheme
 import java.util.Locale
 import kotlin.math.abs
 
-const val PREFS_NAME = "TimerPrefs"
-const val KEY_APP_RUNNING = "isAppRunning"
-
 class MainActivity : ComponentActivity() {
 
     private val timerViewModel: TimerViewModel by viewModels()
@@ -100,7 +97,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             SimpleTimerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    TimerScreen(modifier = Modifier.padding(innerPadding), timerViewModel = timerViewModel)
+                    TimerScreen(
+                        modifier = Modifier.padding(innerPadding),
+                        timerViewModel = timerViewModel
+                    )
                 }
             }
         }
@@ -140,6 +140,12 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val isReady by timerViewModel.isReady.collectAsState()
+    if (!isReady) {
+        // You can show a loading indicator here if you want
+        return
     }
 
     val minutes by timerViewModel.minutes.collectAsState()
@@ -206,7 +212,7 @@ fun NumberPicker(
     val items = remember { range.toList() }
     val itemHeight = 48.dp
     val visibleItemsCount = 3
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = value)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = items.indexOf(value).coerceAtLeast(0))
 
     val centralItemIndex by remember {
         derivedStateOf {
