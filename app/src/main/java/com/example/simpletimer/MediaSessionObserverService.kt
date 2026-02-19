@@ -88,6 +88,7 @@ class MediaSessionObserverService : NotificationListenerService() {
         return object : MediaController.Callback() {
 
             private var lastSnapshot: TrackSnapshot? = null
+            private var isInitialized = false
 
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 if (state == null) return
@@ -95,7 +96,7 @@ class MediaSessionObserverService : NotificationListenerService() {
                 val metadata = controller.metadata
                 val now = SystemClock.elapsedRealtime()
 
-                if (lastSnapshot?.lastState == PlaybackState.STATE_PAUSED && state.state == PlaybackState.STATE_PLAYING) {
+                if (isInitialized && lastSnapshot?.lastState == PlaybackState.STATE_PAUSED && state.state == PlaybackState.STATE_PLAYING) {
                     val timeSincePause = now - (lastSnapshot?.stateUpdateTime ?: 0)
                     if (timeSincePause < PAUSE_PLAY_THRESHOLD_MS) {
                         maybeTriggerSkip(now)
@@ -111,6 +112,7 @@ class MediaSessionObserverService : NotificationListenerService() {
                     lastState = state.state,
                     stateUpdateTime = now
                 )
+                isInitialized = true
             }
 
             override fun onMetadataChanged(metadata: MediaMetadata?) {
@@ -142,6 +144,7 @@ class MediaSessionObserverService : NotificationListenerService() {
                     lastState = PlaybackState.STATE_NONE,
                     stateUpdateTime = SystemClock.elapsedRealtime()
                 )
+                isInitialized = false
             }
         }
     }
