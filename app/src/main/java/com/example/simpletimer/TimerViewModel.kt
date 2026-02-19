@@ -1,11 +1,5 @@
 package com.example.simpletimer
 
-import android.annotation.SuppressLint
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,64 +9,39 @@ import kotlinx.coroutines.launch
 
 class TimerViewModel : ViewModel() {
 
-    @SuppressLint("StaticFieldLeak")
     private var timerService: TimerService? = null
 
-    // These are now just mirrors of the service's state
+    // --- Mutable State Flows for UI state ---
     private val _remainingTime = MutableStateFlow(0L)
     val remainingTime: StateFlow<Long> = _remainingTime.asStateFlow()
 
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
-    private val _minutes = MutableStateFlow("")
+    private val _minutes = MutableStateFlow("2")
     val minutes: StateFlow<String> = _minutes.asStateFlow()
 
-    private val _seconds = MutableStateFlow("")
+    private val _seconds = MutableStateFlow("0")
     val seconds: StateFlow<String> = _seconds.asStateFlow()
 
-    private val _isDirty = MutableStateFlow(false)
-    val isDirty: StateFlow<Boolean> = _isDirty.asStateFlow()
-
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as TimerService.TimerBinder
-            timerService = binder.getService()
-            // Start collecting all states from the service
-            viewModelScope.launch {
-                timerService?.remainingTime?.collect { _remainingTime.value = it }
-            }
-            viewModelScope.launch {
-                timerService?.isRunning?.collect { _isRunning.value = it }
-            }
-            viewModelScope.launch {
-                timerService?.minutes?.collect { _minutes.value = it }
-            }
-            viewModelScope.launch {
-                timerService?.seconds?.collect { _seconds.value = it }
-            }
-            viewModelScope.launch {
-                timerService?.isDirty?.collect { _isDirty.value = it }
-            }
+    fun setTimerService(service: TimerService) {
+        timerService = service
+        // --- Sync ViewModel state with Service state after binding ---
+        viewModelScope.launch {
+            service.remainingTime.collect { _remainingTime.value = it }
         }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            timerService = null
+        viewModelScope.launch {
+            service.isRunning.collect { _isRunning.value = it }
+        }
+        viewModelScope.launch {
+            service.minutes.collect { _minutes.value = it }
+        }
+        viewModelScope.launch {
+            service.seconds.collect { _seconds.value = it }
         }
     }
 
-    fun bindService(context: Context) {
-        Intent(context, TimerService::class.java).also {
-            context.bindService(it, connection, Context.BIND_AUTO_CREATE)
-        }
-    }
-
-    fun unbindService(context: Context) {
-        context.unbindService(connection)
-    }
-
-    // --- All public methods are now just simple pass-through calls to the service --- 
-
+    // --- Timer Actions ---
     fun onMinutesChanged(newMinutes: String) {
         timerService?.onMinutesChanged(newMinutes)
     }
@@ -81,15 +50,11 @@ class TimerViewModel : ViewModel() {
         timerService?.onSecondsChanged(newSeconds)
     }
 
-    fun setTimer() {
-        timerService?.setTimer()
-    }
-
     fun startTimer() {
         timerService?.startTimer()
     }
 
-    fun resetToDefault() {
-        timerService?.resetToDefault()
+    fun resetTimer() {
+        timerService?.resetTimer()
     }
 }
