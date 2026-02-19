@@ -1,6 +1,7 @@
 package com.example.simpletimer
 
 import android.app.AlarmManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -102,6 +103,10 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
                 _isRunning.value = false
                 startForeground(NOTIFICATION_ID, createNotification("Timer Finished"))
                 playSound()
+            }
+
+            ACTION_CANCEL_TIMER -> {
+                resetTimer()
             }
         }
 
@@ -221,17 +226,54 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     // --- Notification ---
     private fun createNotificationChannel() {
+
         val channel = NotificationChannel(
-            CHANNEL_ID, "Timer Service Channel", NotificationManager.IMPORTANCE_HIGH
-        )
+            CHANNEL_ID,
+            "Timer Service Channel",
+            NotificationManager.IMPORTANCE_LOW   // ✅ silent foreground
+        ).apply {
+            setSound(null, null)
+            enableVibration(false)
+            setShowBadge(false)
+        }
+
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
     }
 
-    private fun createNotification(title: String) =
-        NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(title)
+    private fun createNotification(title: String): Notification {
+
+        val cancelIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, TimerService::class.java).apply {
+                action = ACTION_CANCEL_TIMER   // new action
+            },
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val activityIntent = Intent(this, MainActivity::class.java)
+        val activityPendingIntent = PendingIntent.getActivity(this, 0, activityIntent, PendingIntent.FLAG_IMMUTABLE)
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(title)
             .setContentText("Time: ${formatTime(remainingTime.value)}")
-            .setSmallIcon(R.drawable.ic_launcher_foreground).setOnlyAlertOnce(true).build()
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentIntent(activityPendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,   // your X icon
+                "Cancel",
+                cancelIntent
+            )
+            .setOngoing(true)                 // ✅ makes it persistent
+            .setOnlyAlertOnce(true)
+            .setSilent(true)                  // ✅ no sound
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setForegroundServiceBehavior(
+                NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE
+            )
+            .build()
+    }
 
     private fun updateNotification(title: String) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -265,5 +307,10 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         const val NOTIFICATION_ID = 1
         const val ACTION_PLAY_SOUND = "com.example.simpletimer.PLAY_SOUND"
         const val ACTION_START_TIMER = "com.example.simpletimer.START_TIMER"
+        const val ACTION_CANCEL_TIMER = "com.example.simpletimer.CANCEL_TIMER"
+        const val PREFS_NAME = "SimpleTimerPrefs"
+        const val KEY_LAST_MINUTES = "last_minutes"
+        const val KEY_LAST_SECONDS = "last_seconds"
+        const val KEY_APP_RUNNING = "app_running"
     }
 }

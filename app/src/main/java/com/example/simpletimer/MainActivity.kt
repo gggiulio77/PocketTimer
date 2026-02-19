@@ -201,8 +201,8 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
         // --- Permission Buttons ---
         PermissionButton(
             isGranted = hasNotificationListenerPermission,
-            grantedText = "Media Observer: Enabled",
-            notGrantedText = "Media Observer: Disabled",
+            grantedText = "Notification/Media Observer: Enabled",
+            notGrantedText = "Notification/Media Observer: Disabled",
             onClick = { openNotificationListenerSettings(context) }
         )
         Spacer(modifier = Modifier.height(8.dp))
