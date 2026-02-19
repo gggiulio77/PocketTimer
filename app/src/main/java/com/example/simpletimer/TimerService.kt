@@ -84,7 +84,11 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         when (intent?.action) {
 
             ACTION_START_TIMER -> {
-                startTimer()
+                if (isRunning.value) {
+                    resetTimer()
+                } else {
+                    startTimer()
+                }
             }
 
             ACTION_PLAY_SOUND -> {
@@ -155,6 +159,12 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
+    fun resetTimer() {
+        cancelTimerInternals()
+        setTimer() // Reset the display to the last set time
+        _isRunning.value = false
+    }
+
     fun resetToDefault() {
         cancelTimerInternals()
         _minutes.value = "2"
@@ -222,6 +232,14 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         val m = (totalSeconds % 3600) / 60
         val s = totalSeconds % 60
         return String.format(Locale.US, "%02d:%02d", m, s)
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // When the app is swiped away from recents, stop the service and cancel the alarm.
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(KEY_APP_RUNNING, false).apply()
+        stopSelf()
     }
 
     override fun onDestroy() {
