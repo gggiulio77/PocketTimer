@@ -158,19 +158,24 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (isRunning) {
-            // --- Timer Running View ---
-            Text(
-                text = formatTime(remainingTime),
-                fontSize = 64.sp,
-                color = Color.White
-            )
-        } else {
-            // --- Timer Picker View ---
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                NumberPicker(value = minutes.toIntOrNull() ?: 0, onValueChange = { timerViewModel.onMinutesChanged(it.toString()) }, range = 0..59)
-                Text(text = ":", fontSize = 32.sp, color = Color.White)
-                NumberPicker(value = seconds.toIntOrNull() ?: 0, onValueChange = { timerViewModel.onSecondsChanged(it.toString()) }, range = 0..59)
+        Box(
+            modifier = Modifier.height(240.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isRunning) {
+                // --- Timer Running View ---
+                Text(
+                    text = formatTime(remainingTime),
+                    fontSize = 64.sp,
+                    color = Color.White
+                )
+            } else {
+                // --- Timer Picker View ---
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    NumberPicker(value = minutes.toIntOrNull() ?: 0, onValueChange = { timerViewModel.onMinutesChanged(it.toString()) }, range = 0..59)
+                    Text(text = ":", fontSize = 32.sp, color = Color.White)
+                    NumberPicker(value = seconds.toIntOrNull() ?: 0, onValueChange = { timerViewModel.onSecondsChanged(it.toString()) }, range = 0..59)
+                }
             }
         }
 
@@ -210,7 +215,7 @@ fun NumberPicker(
     range: IntRange
 ) {
     val items = remember { range.toList() }
-    val itemHeight = 48.dp
+    val itemHeight = 72.dp
     val visibleItemsCount = 3
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = items.indexOf(value).coerceAtLeast(0))
 
@@ -234,7 +239,7 @@ fun NumberPicker(
         }
     }
 
-    Box(modifier = modifier.height(itemHeight * visibleItemsCount).width(100.dp)) {
+    Box(modifier = modifier.height(itemHeight * visibleItemsCount).width(120.dp)) {
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(vertical = itemHeight * (visibleItemsCount / 2))
@@ -251,9 +256,9 @@ fun NumberPicker(
                         text = "%02d".format(items[index]),
                         textAlign = TextAlign.Center,
                         style = if (index == centralItemIndex) {
-                            TextStyle(fontSize = 32.sp, color = Color.White)
+                            TextStyle(fontSize = 64.sp, color = Color.White)
                         } else {
-                            TextStyle(fontSize = 24.sp, color = Color.Gray)
+                            TextStyle(fontSize = 32.sp, color = Color.Gray)
                         }
                     )
                 }
