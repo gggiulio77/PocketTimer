@@ -13,8 +13,10 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Binder
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
@@ -43,7 +45,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var alarmManager: AlarmManager
     private lateinit var alarmIntent: PendingIntent
-    private var focusRequest: AudioFocusRequest? = null // Use modern request
+    private var focusRequest: AudioFocusRequest? = null
 
     // --- State Management ---
     private val _remainingTime = MutableStateFlow(0L)
@@ -71,19 +73,15 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         super.onCreate()
         createNotificationChannel()
 
-        // --- Initialize Components ---
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock =
-            powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SimpleTimer:TimerWakeLock")
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SimpleTimer:TimerWakeLock")
 
-        // Create a single, reusable PendingIntent for the alarm
         val intent = Intent(this, TimerService::class.java).apply { action = ACTION_PLAY_SOUND }
         alarmIntent = PendingIntent.getService(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
-        // Load the last saved time
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _minutes.value = prefs.getString(KEY_LAST_MINUTES, "2") ?: "2"
         _seconds.value = prefs.getString(KEY_LAST_SECONDS, "0") ?: "0"
@@ -92,32 +90,37 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-
         when (intent?.action) {
-
             ACTION_START_TIMER -> {
+                Log.d("TimerService", "ACTION_START_TIMER received")
                 if (isRunning.value) {
                     resetTimer()
                 } else {
                     startTimer()
                 }
             }
-
             ACTION_PLAY_SOUND -> {
+                Log.d("TimerService", "ACTION_PLAY_SOUND received")
                 _isRunning.value = false
+                uiUpdateJob?.cancel()
+                uiUpdateJob = null
+                
+                // Immediately save the finish time to block the observer from auto-restarting
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit(commit = true) {
+                    putLong(AppConstants.KEY_LAST_FINISH_TIME, System.currentTimeMillis())
+                }
+
+                _remainingTime.value = 0 // Ensure it shows 00:00
                 startForeground(NOTIFICATION_ID, createNotification("Timer Finished"))
                 playSound()
             }
-
             ACTION_CANCEL_TIMER -> {
                 resetTimer()
             }
         }
-
         return START_NOT_STICKY
     }
 
-    // --- Public API for the ViewModel ---
     fun onMinutesChanged(newMinutes: String) {
         val filtered = newMinutes.filter { it.isDigit() }
         _minutes.value = if ((filtered.toIntOrNull() ?: 0) > 59) "59" else filtered
@@ -141,7 +144,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     fun startTimer() {
-        // --- This is now a true "restart" function ---
+        Log.d("TimerService", "Starting timer...")
         cancelTimerInternals()
         setTimer()
 
@@ -153,9 +156,11 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         val triggerAtMillis = System.currentTimeMillis() + _remainingTime.value
 
         try {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP, triggerAtMillis, alarmIntent
-            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, alarmIntent)
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, alarmIntent)
+            }
         } catch (_: SecurityException) {
             _isRunning.value = false
             return
@@ -164,11 +169,11 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         _isRunning.value = true
         startForeground(NOTIFICATION_ID, createNotification("Timer Running"))
 
-        // --- Coroutine for UI updates ONLY ---
         uiUpdateJob = serviceScope.launch {
-            while (_remainingTime.value > 0) {
+            while (_isRunning.value && _remainingTime.value > 0) {
                 delay(1000)
-                _remainingTime.value -= 1000
+                if (!_isRunning.value) break
+                _remainingTime.value = (_remainingTime.value - 1000).coerceAtLeast(0)
                 updateNotification("Timer Running")
             }
         }
@@ -177,85 +182,94 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun cancelTimerInternals() {
         alarmManager.cancel(alarmIntent)
         uiUpdateJob?.cancel()
+        uiUpdateJob = null
+        stopSound()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     fun resetTimer() {
+        Log.d("TimerService", "Resetting timer")
         cancelTimerInternals()
-        setTimer() // Reset the display to the last set time
-        _isRunning.value = false
-    }
-
-    fun resetToDefault() {
-        cancelTimerInternals()
-        _minutes.value = "2"
-        _seconds.value = "0"
         setTimer()
         _isRunning.value = false
     }
 
-    // --- Sound Playback ---
     private fun playSound() {
-        val audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+        stopSound() 
+
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
 
         wakeLock?.acquire(10_000)
 
-        val afd = resources.openRawResourceFd(R.raw.beep)
-
-        mediaPlayer = MediaPlayer().apply {
-            setAudioAttributes(audioAttributes)
-            setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-            setOnCompletionListener { finishAndReset() }
-            setOnErrorListener { _, _, _ -> finishAndReset(); true }
-            prepare()
-            start()
+        try {
+            val afd = resources.openRawResourceFd(R.raw.beep)
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(audioAttributes)
+                setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                setOnCompletionListener { finishAndReset() }
+                setOnErrorListener { _, _, _ -> finishAndReset(); true }
+                prepare()
+                start()
+            }
+            afd.close()
+        } catch (e: Exception) {
+            Log.e("TimerService", "Error playing sound", e)
+            finishAndReset()
         }
-
-        afd.close()
     }
 
     private fun finishAndReset() {
-        mediaPlayer?.release()
+        Log.d("TimerService", "finishAndReset called")
+        if (_isRunning.value) {
+            stopSound()
+            return
+        }
+
+        stopSound()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        setTimer()
+        _isRunning.value = false
+    }
+
+    private fun stopSound() {
+        mediaPlayer?.apply {
+            try {
+                setOnCompletionListener(null)
+                setOnErrorListener(null)
+                if (isPlaying) stop()
+                release()
+            } catch (e: Exception) { }
+        }
         mediaPlayer = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
         focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        setTimer() // Reset timer display to the configured time
-        _isRunning.value = false // CRITICAL: Ensure the start button is re-enabled
     }
 
-    override fun onAudioFocusChange(focusChange: Int) { /* No-op */
-    }
+    override fun onAudioFocusChange(focusChange: Int) {}
 
-    // --- Notification ---
     private fun createNotificationChannel() {
-
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Timer Service Channel",
-            NotificationManager.IMPORTANCE_LOW   // ✅ silent foreground
+            NotificationManager.IMPORTANCE_LOW
         ).apply {
             setSound(null, null)
             enableVibration(false)
             setShowBadge(false)
         }
-
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
     }
 
     private fun createNotification(title: String): Notification {
-
         val cancelIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, TimerService::class.java).apply {
-                action = ACTION_CANCEL_TIMER   // new action
-            },
+            this, 1,
+            Intent(this, TimerService::class.java).apply { action = ACTION_CANCEL_TIMER },
             PendingIntent.FLAG_IMMUTABLE
         )
-
         val activityIntent = Intent(this, MainActivity::class.java)
         val activityPendingIntent = PendingIntent.getActivity(this, 0, activityIntent, PendingIntent.FLAG_IMMUTABLE)
 
@@ -264,18 +278,12 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
             .setContentText("Time: ${formatTime(remainingTime.value)}")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(activityPendingIntent)
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,   // your X icon
-                "Cancel",
-                cancelIntent
-            )
-            .setOngoing(true)                 // ✅ makes it persistent
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelIntent)
+            .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setSilent(true)                  // ✅ no sound
+            .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setForegroundServiceBehavior(
-                NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE
-            )
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
@@ -285,7 +293,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     }
 
     private fun formatTime(timeInMillis: Long): String {
-        val totalSeconds = (timeInMillis + 999) / 1000
+        val totalSeconds = (timeInMillis.coerceAtLeast(0) + 999) / 1000
         val m = (totalSeconds % 3600) / 60
         val s = totalSeconds % 60
         return String.format(Locale.US, "%02d:%02d", m, s)
@@ -293,7 +301,6 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // When the app is swiped away from recents, stop the service and cancel the alarm.
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putBoolean(KEY_APP_RUNNING, false).apply()
         stopSelf()
@@ -302,8 +309,6 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     override fun onDestroy() {
         super.onDestroy()
         cancelTimerInternals()
-        mediaPlayer?.release()
-        if (wakeLock?.isHeld == true) wakeLock?.release()
     }
 
     companion object {
