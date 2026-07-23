@@ -1,4 +1,4 @@
-package com.example.simpletimer
+package com.gonzalogiulio.pockettimer
 
 import android.content.ComponentName
 import android.content.Context
@@ -11,9 +11,9 @@ import android.os.IBinder
 import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import android.util.Log
-import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
-import com.example.simpletimer.AppConstants.KEY_LAST_FINISH_TIME
-import com.example.simpletimer.AppConstants.PREFS_NAME
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_APP_RUNNING
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_FINISH_TIME
+import com.gonzalogiulio.pockettimer.AppConstants.PREFS_NAME
 
 class MediaSessionObserverService : NotificationListenerService() {
 

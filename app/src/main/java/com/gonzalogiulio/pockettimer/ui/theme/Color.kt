@@ -1,4 +1,4 @@
-package com.example.simpletimer.ui.theme
+package com.gonzalogiulio.pockettimer.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

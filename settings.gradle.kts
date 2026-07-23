@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SimpleTimer"
+rootProject.name = "PocketTimer"
 include(":app")
  

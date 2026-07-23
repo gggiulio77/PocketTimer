@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy — PocketTimer</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f8;
+      --card: #ffffff;
+      --text: #1a1a1a;
+      --muted: #555;
+      --border: #e2e2e5;
+      --accent: #1b6ef3;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #121214;
+        --card: #1c1c1f;
+        --text: #f2f2f2;
+        --muted: #b0b0b5;
+        --border: #2e2e33;
+        --accent: #6ea8ff;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.75rem 1.5rem;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.75rem;
+      line-height: 1.25;
+    }
+    h2 {
+      margin: 1.75rem 0 0.6rem;
+      font-size: 1.15rem;
+    }
+    p, li { color: var(--text); }
+    .meta {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin: 0 0 1.25rem;
+    }
+    ul { padding-left: 1.25rem; }
+    li { margin: 0.35rem 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+      margin: 0.75rem 0 0.25rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { font-weight: 600; }
+    a { color: var(--accent); }
+    footer {
+      margin-top: 1.5rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <article class="card">
+      <h1>Privacy Policy</h1>
+      <p class="meta">
+        <strong>PocketTimer</strong> (package: <code>com.gonzalogiulio.pockettimer</code>)<br>
+        Developer: Gonzalo Giulio<br>
+        Effective date: July 23, 2026
+      </p>
+
+      <p>
+        PocketTimer is a local countdown timer for Android with an optional hands-free start
+        gesture (a quick pause-then-play on media controls such as headphones). This policy
+        explains what data the app uses, what it does not collect, and why certain permissions
+        are requested.
+      </p>
+
+      <h2>1. Summary</h2>
+      <ul>
+        <li>We do <strong>not</strong> collect, sell, or share personal information.</li>
+        <li>The app works <strong>fully offline</strong> and does not require internet access.</li>
+        <li>No advertising, analytics, crash-reporting, or tracking SDKs are included.</li>
+        <li>Only a few timer-related preferences are stored on your device.</li>
+      </ul>
+
+      <h2>2. Data we do not collect</h2>
+      <p>PocketTimer does not collect or transmit:</p>
+      <ul>
+        <li>Name, email, phone number, or account information</li>
+        <li>Location, contacts, photos, files, or microphone/camera data</li>
+        <li>Advertising identifiers or usage analytics</li>
+        <li>Crash reports or diagnostics to external servers</li>
+        <li>Payment or financial information</li>
+      </ul>
+      <p>
+        The app does not include a network permission and does not send data to our servers
+        or to third parties.
+      </p>
+
+      <h2>3. Data stored only on your device</h2>
+      <p>The app may store the following locally using Android SharedPreferences:</p>
+      <ul>
+        <li>Last selected timer duration (minutes and seconds)</li>
+        <li>Internal flags used for correct app behavior (for example, whether the app is
+          considered active, and the last timer finish time to avoid accidental restarts)</li>
+      </ul>
+      <p>
+        This information stays on your device. Uninstalling the app removes it, subject to
+        any restore from an Android system backup (see below).
+      </p>
+
+      <h2>4. Permissions and why we use them</h2>
+      <p>
+        PocketTimer requests only the capabilities needed to run a reliable timer and optional
+        hands-free media control. None of these permissions are used to collect or upload
+        personal data.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Permission / access</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Notifications</td>
+            <td>Show the ongoing timer countdown and status while the timer is running.</td>
+          </tr>
+          <tr>
+            <td>Foreground service (media playback type)</td>
+            <td>
+              Keep the timer running reliably when the screen is off or the app is in the
+              background, and play the completion beep sound.
+            </td>
+          </tr>
+          <tr>
+            <td>Exact alarms</td>
+            <td>
+              Fire the timer at the correct end time, including when battery-saving modes are
+              active.
+            </td>
+          </tr>
+          <tr>
+            <td>Wake lock</td>
+            <td>
+              Briefly keep the device awake so the completion beep can play reliably.
+            </td>
+          </tr>
+          <tr>
+            <td>Notification access (Notification Listener)</td>
+            <td>
+              Observe active media playback sessions (for example, music or podcast apps) so a
+              quick pause-then-play on headphones or other media controls can start the timer
+              without unlocking the phone. See the next section for details.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>5. Notification access and media information</h2>
+      <p>
+        To support hands-free control, you may optionally enable <strong>Notification access</strong>
+        for PocketTimer in Android system settings. This is a sensitive system permission.
+      </p>
+      <p>When enabled, the app uses it to:</p>
+      <ul>
+        <li>Access media session playback state (playing, paused, position)</li>
+        <li>
+          Temporarily read limited media metadata in memory (such as track identifiers, title,
+          or duration) only to distinguish an intentional pause-then-play gesture from track
+          changes or other media events
+        </li>
+      </ul>
+      <p>We do <strong>not</strong>:</p>
+      <ul>
+        <li>Store media metadata or playback history on disk</li>
+        <li>Send media information or notification content off your device</li>
+        <li>Use notification access for advertising or profiling</li>
+      </ul>
+      <p>
+        The app’s code does not process general notification text for other apps. Enabling
+        Notification access is still a system-level capability; you can revoke it at any time
+        in Android Settings. The timer can still be started manually from the app without this
+        access.
+      </p>
+
+      <h2>6. No internet and no sale of data</h2>
+      <p>
+        PocketTimer does not request internet permission and does not transmit user data over
+        the network. We do not sell, rent, or share user data with third parties because the
+        app does not collect such data.
+      </p>
+
+      <h2>7. Backups</h2>
+      <p>
+        If Android Auto Backup (or a similar system backup feature) is enabled on your device,
+        the operating system may include the app’s local preferences in your personal device
+        backup. PocketTimer does not operate its own cloud sync or account-based backup.
+      </p>
+
+      <h2>8. Children</h2>
+      <p>
+        PocketTimer is a general utility timer. We do not knowingly collect personal information
+        from children. Because the app does not collect personal data, no special children’s
+        data processing occurs.
+      </p>
+
+      <h2>9. Changes to this policy</h2>
+      <p>
+        We may update this privacy policy if the app’s behavior changes. The effective date at
+        the top of this page will be revised when that happens. Continued use of the app after
+        an update means you accept the revised policy.
+      </p>
+
+      <h2>10. Contact</h2>
+      <p>
+        If you have questions about this privacy policy or PocketTimer, contact:
+      </p>
+      <p>
+        <strong>Gonzalo Giulio</strong><br>
+        Email: <a href="mailto:gggiulio77@gmail.com">gggiulio77@gmail.com</a><br>
+        Project: <a href="https://github.com/gggiulio77/PocketTimer">github.com/gggiulio77/PocketTimer</a>
+      </p>
+
+      <footer>
+        This page is provided for Google Play and end-user transparency.
+      </footer>
+    </article>
+  </main>
+</body>
+</html>

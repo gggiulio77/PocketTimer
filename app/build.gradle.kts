@@ -12,7 +12,7 @@ val keystoreProperties = Properties()
 keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 
 android {
-    namespace = "com.example.simpletimer"
+    namespace = "com.gonzalogiulio.pockettimer"
     compileSdk = 36
 
     signingConfigs {
@@ -25,7 +25,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.simpletimer"
+        applicationId = "com.gonzalogiulio.pockettimer"
         minSdk = 31
         targetSdk = 36
         versionCode = 1

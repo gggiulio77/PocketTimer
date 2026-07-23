@@ -1,4 +1,4 @@
-package com.example.simpletimer
+package com.gonzalogiulio.pockettimer
 
 import android.Manifest
 import android.app.AlarmManager
@@ -53,9 +53,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
-import com.example.simpletimer.AppConstants.PREFS_NAME
-import com.example.simpletimer.ui.theme.SimpleTimerTheme
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_APP_RUNNING
+import com.gonzalogiulio.pockettimer.AppConstants.PREFS_NAME
+import com.gonzalogiulio.pockettimer.ui.theme.PocketTimerTheme
 import java.util.Locale
 import kotlin.math.abs
 
@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            SimpleTimerTheme {
+            PocketTimerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     TimerScreen(
                         modifier = Modifier.padding(innerPadding),
@@ -305,7 +305,7 @@ private fun isNotificationListenerEnabled(context: Context): Boolean {
     val enabledListeners =
         Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
     val componentName =
-        "com.example.simpletimer/com.example.simpletimer.MediaSessionObserverService"
+        "com.gonzalogiulio.pockettimer/com.gonzalogiulio.pockettimer.MediaSessionObserverService"
     return enabledListeners?.contains(componentName) == true
 }
 
@@ -336,7 +336,7 @@ fun formatTime(timeInMillis: Long): String {
 @Preview(showBackground = true)
 @Composable
 fun TimerScreenPreview() {
-    SimpleTimerTheme {
+    PocketTimerTheme {
         //TimerScreen()
     }
 }

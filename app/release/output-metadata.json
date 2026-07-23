@@ -4,7 +4,7 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.example.simpletimer",
+  "applicationId": "com.gonzalogiulio.pockettimer",
   "variantName": "release",
   "elements": [
     {

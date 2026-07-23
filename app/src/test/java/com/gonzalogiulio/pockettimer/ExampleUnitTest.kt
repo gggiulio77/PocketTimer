@@ -1,4 +1,4 @@
-package com.example.simpletimer
+package com.gonzalogiulio.pockettimer
 
 import org.junit.Test
 

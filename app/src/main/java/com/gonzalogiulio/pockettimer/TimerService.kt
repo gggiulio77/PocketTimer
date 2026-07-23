@@ -1,4 +1,4 @@
-package com.example.simpletimer
+package com.gonzalogiulio.pockettimer
 
 import android.app.AlarmManager
 import android.app.Notification
@@ -19,10 +19,10 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
-import com.example.simpletimer.AppConstants.KEY_APP_RUNNING
-import com.example.simpletimer.AppConstants.KEY_LAST_MINUTES
-import com.example.simpletimer.AppConstants.KEY_LAST_SECONDS
-import com.example.simpletimer.AppConstants.PREFS_NAME
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_APP_RUNNING
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_MINUTES
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_SECONDS
+import com.gonzalogiulio.pockettimer.AppConstants.PREFS_NAME
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,7 +77,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SimpleTimer:TimerWakeLock")
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PocketTimer:TimerWakeLock")
 
         val intent = Intent(this, TimerService::class.java).apply { action = ACTION_PLAY_SOUND }
         alarmIntent = PendingIntent.getService(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
@@ -314,8 +314,8 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     companion object {
         const val CHANNEL_ID = "TimerServiceChannel"
         const val NOTIFICATION_ID = 1
-        const val ACTION_PLAY_SOUND = "com.example.simpletimer.PLAY_SOUND"
-        const val ACTION_START_TIMER = "com.example.simpletimer.START_TIMER"
-        const val ACTION_CANCEL_TIMER = "com.example.simpletimer.CANCEL_TIMER"
+        const val ACTION_PLAY_SOUND = "com.gonzalogiulio.pockettimer.PLAY_SOUND"
+        const val ACTION_START_TIMER = "com.gonzalogiulio.pockettimer.START_TIMER"
+        const val ACTION_CANCEL_TIMER = "com.gonzalogiulio.pockettimer.CANCEL_TIMER"
     }
 }

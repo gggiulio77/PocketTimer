@@ -1,8 +1,12 @@
-# Simple Timer
+# PocketTimer
+
+## Privacy
+
+[Privacy Policy](https://gggiulio77.github.io/PocketTimer/privacy.html) — the app is offline-only and does not collect personal data.
 
 ## Summary
 
-Simple Timer is an Android application that provides a straightforward timer functionality with a unique hands-free control: it can be triggered by media playback actions, specifically a quick "pause and play" sequence on your headphones or any media controller. This allows you to start a timer without ever touching your phone, making it ideal for workouts, cooking, or any activity where your hands are busy.
+PocketTimer is an Android application that provides a straightforward timer functionality with a unique hands-free control: it can be triggered by media playback actions, specifically a quick "pause and play" sequence on your headphones or any media controller. This allows you to start a timer without ever touching your phone — it stays locked in your pocket, making it ideal for workouts, cooking, or any activity where you want to stay focused and off the screen.
 
 ## Goal of the Project
 
@@ -33,7 +37,7 @@ To get the app running on your device:
 
 1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/yourusername/SimpleTimer.git
+    git clone https://github.com/yourusername/PocketTimer.git
     ```
 2.  **Open in Android Studio**: Open the project folder and allow Gradle to sync.
 3.  **Build the APK**:

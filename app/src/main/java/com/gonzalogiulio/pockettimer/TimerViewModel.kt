@@ -1,4 +1,4 @@
-package com.example.simpletimer
+package com.gonzalogiulio.pockettimer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
