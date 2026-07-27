@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -169,7 +170,7 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
                 Text(
                     text = formatTime(remainingTime),
                     fontSize = 64.sp,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             } else {
                 // --- Timer Picker View ---
@@ -179,7 +180,7 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
                         onValueChange = { timerViewModel.onMinutesChanged(it.toString()) },
                         range = 0..59
                     )
-                    Text(text = ":", fontSize = 32.sp, color = Color.White)
+                    Text(text = ":", fontSize = 32.sp, color = MaterialTheme.colorScheme.onBackground)
                     NumberPicker(
                         value = seconds.toIntOrNull() ?: 0,
                         onValueChange = { timerViewModel.onSecondsChanged(it.toString()) },
@@ -272,9 +273,9 @@ fun NumberPicker(
                         text = "%02d".format(items[index]),
                         textAlign = TextAlign.Center,
                         style = if (index == centralItemIndex) {
-                            TextStyle(fontSize = 64.sp, color = Color.White)
+                            TextStyle(fontSize = 64.sp, color = MaterialTheme.colorScheme.onBackground)
                         } else {
-                            TextStyle(fontSize = 32.sp, color = Color.Gray)
+                            TextStyle(fontSize = 32.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     )
                 }
@@ -294,7 +295,7 @@ private fun PermissionButton(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isGranted) Color.Green.copy(alpha = 0.5f) else Color.Red.copy(alpha = 0.5f),
-            contentColor = Color.White
+            contentColor = MaterialTheme.colorScheme.onSurface
         )
     ) {
         Text(text = if (isGranted) grantedText else notGrantedText)

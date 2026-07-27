@@ -1,0 +1,52 @@
+================================================================================
+GOOGLE PLAY STORE LISTING — PocketTimer
+================================================================================
+
+SHORT DESCRIPTION (80 characters max)
+--------------------------------------------------------------------------------
+Hands-free pocket timer. Pause+play headphones to start. Works offline, locked.
+
+
+FULL DESCRIPTION (4000 characters max)
+--------------------------------------------------------------------------------
+PocketTimer is a simple, reliable countdown timer designed to stay in your pocket. Start it hands-free with a quick pause-then-play on your headphones or any media controller - no need to unlock your phone or leave your workout, kitchen, or focus session.
+
+HOW IT WORKS
+1. Set minutes and seconds with smooth scroll pickers.
+2. Grant Notification/Media Observer and Exact Alarm access (buttons turn green when ready).
+3. Play music or a podcast as usual.
+4. Pause, then play again within one second - the timer starts automatically.
+5. When time is up, a clear beep lets you know.
+
+WHY POCKET TIMER
+- Hands-free start - phone stays locked in your pocket
+- Works with Spotify, YouTube Music, podcasts, and other media apps
+- Smart detection - ignores track skips and volume changes to avoid false starts
+- Reliable countdown - keeps running with the screen off via a foreground service
+- Exact timing - uses exact alarms so the end time stays accurate in battery-saving modes
+- Live notification - see remaining time and cancel anytime from the notification
+- Remembers your last duration for faster setup next time
+
+PRIVACY-FRIENDLY
+- Fully offline - no internet permission required
+- No ads, no tracking, no analytics SDKs
+- No accounts and no personal data collection
+- Only stores timer preferences on your device
+
+BEST FOR
+Workouts and intervals, cooking and kitchen timers, study focus sessions, walks, chores, and any moment you want a timer without touching the screen.
+
+REQUIREMENTS
+Android 12 (API 31) or higher. Optional Notification access enables the hands-free media gesture; you can still start the timer manually from the app.
+
+Questions or feedback: gggiulio77@gmail.com
+Privacy policy: https://gggiulio77.github.io/PocketTimer/privacy.html
+
+
+ASSETS
+--------------------------------------------------------------------------------
+App icon (512x512 PNG):
+  store/play_icon_512.png
+
+Feature graphic (1024x500 PNG):
+  store/feature_graphic_1024x500.png

@@ -276,7 +276,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText("Time: ${formatTime(remainingTime.value)}")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(activityPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelIntent)
             .setOngoing(true)
