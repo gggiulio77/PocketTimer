@@ -20,8 +20,11 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import com.gonzalogiulio.pockettimer.AppConstants.KEY_APP_RUNNING
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_ARM_SOUND
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_END_SOUND
 import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_MINUTES
 import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_SECONDS
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_RESET_SOUND
 import com.gonzalogiulio.pockettimer.AppConstants.PREFS_NAME
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,10 +41,13 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val binder = TimerBinder()
     private val serviceScope = CoroutineScope(Dispatchers.Main)
     private var uiUpdateJob: Job? = null
+    private var endTimeMillis = 0L
+    private var endHandled = false
 
     // --- Sound & Alarm Components ---
     private lateinit var audioManager: AudioManager
     private var mediaPlayer: MediaPlayer? = null
+    private var eventPlayer: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var alarmManager: AlarmManager
     private lateinit var alarmIntent: PendingIntent
@@ -62,6 +68,15 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
+
+    private val _armSound = MutableStateFlow(SoundCatalog.BUILTIN)
+    val armSound: StateFlow<String> = _armSound.asStateFlow()
+
+    private val _endSound = MutableStateFlow(SoundCatalog.BUILTIN)
+    val endSound: StateFlow<String> = _endSound.asStateFlow()
+
+    private val _resetSound = MutableStateFlow(SoundCatalog.BUILTIN)
+    val resetSound: StateFlow<String> = _resetSound.asStateFlow()
 
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
@@ -85,6 +100,9 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         _minutes.value = prefs.getString(KEY_LAST_MINUTES, "2") ?: "2"
         _seconds.value = prefs.getString(KEY_LAST_SECONDS, "0") ?: "0"
+        _armSound.value = prefs.getString(KEY_ARM_SOUND, SoundCatalog.BUILTIN) ?: SoundCatalog.BUILTIN
+        _endSound.value = prefs.getString(KEY_END_SOUND, SoundCatalog.BUILTIN) ?: SoundCatalog.BUILTIN
+        _resetSound.value = prefs.getString(KEY_RESET_SOUND, SoundCatalog.BUILTIN) ?: SoundCatalog.BUILTIN
         setTimer()
         _isReady.value = true
     }
@@ -101,18 +119,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
             }
             ACTION_PLAY_SOUND -> {
                 Log.d("TimerService", "ACTION_PLAY_SOUND received")
-                _isRunning.value = false
-                uiUpdateJob?.cancel()
-                uiUpdateJob = null
-                
-                // Immediately save the finish time to block the observer from auto-restarting
-                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit(commit = true) {
-                    putLong(AppConstants.KEY_LAST_FINISH_TIME, System.currentTimeMillis())
-                }
-
-                _remainingTime.value = 0 // Ensure it shows 00:00
-                startForeground(NOTIFICATION_ID, createNotification("Timer Finished"))
-                playSound()
+                handleTimerFinished()
             }
             ACTION_CANCEL_TIMER -> {
                 resetTimer()
@@ -137,6 +144,19 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         prefs.edit { putString(KEY_LAST_SECONDS, _seconds.value) }
     }
 
+    fun onArmSoundChanged(soundId: String) = onSoundChanged(_armSound, KEY_ARM_SOUND, soundId)
+
+    fun onEndSoundChanged(soundId: String) = onSoundChanged(_endSound, KEY_END_SOUND, soundId)
+
+    fun onResetSoundChanged(soundId: String) = onSoundChanged(_resetSound, KEY_RESET_SOUND, soundId)
+
+    private fun onSoundChanged(flow: MutableStateFlow<String>, key: String, soundId: String) {
+        flow.value = soundId
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit { putString(key, soundId) }
+        playEventSound(soundId)
+    }
+
     private fun setTimer() {
         val m = _minutes.value.toLongOrNull() ?: 0
         val s = _seconds.value.toLongOrNull() ?: 0
@@ -146,14 +166,17 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     fun startTimer() {
         Log.d("TimerService", "Starting timer...")
         cancelTimerInternals()
+        endHandled = false
         setTimer()
 
         if (_remainingTime.value <= 0) {
+            endHandled = true
             _isRunning.value = false
             return
         }
 
-        val triggerAtMillis = System.currentTimeMillis() + _remainingTime.value
+        endTimeMillis = System.currentTimeMillis() + _remainingTime.value
+        val triggerAtMillis = endTimeMillis
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
@@ -168,22 +191,34 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
         _isRunning.value = true
         startForeground(NOTIFICATION_ID, createNotification("Timer Running"))
+        playEventSound(_armSound.value)
 
         uiUpdateJob = serviceScope.launch {
-            while (_isRunning.value && _remainingTime.value > 0) {
-                delay(1000)
-                if (!_isRunning.value) break
-                _remainingTime.value = (_remainingTime.value - 1000).coerceAtLeast(0)
-                updateNotification("Timer Running")
+            var lastNotificationText = formatTime(_remainingTime.value)
+            while (_isRunning.value) {
+                val remaining = (endTimeMillis - System.currentTimeMillis()).coerceAtLeast(0)
+                if (remaining <= 0) {
+                    handleTimerFinished()
+                    break
+                }
+                _remainingTime.value = remaining
+                val text = formatTime(remaining)
+                if (text != lastNotificationText) {
+                    updateNotification("Timer Running")
+                    lastNotificationText = text
+                }
+                delay((remaining - 1) % 1000 + 1)
             }
         }
     }
 
     private fun cancelTimerInternals() {
+        endHandled = true
         alarmManager.cancel(alarmIntent)
         uiUpdateJob?.cancel()
         uiUpdateJob = null
         stopSound()
+        stopEventSound()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -192,32 +227,96 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         cancelTimerInternals()
         setTimer()
         _isRunning.value = false
+        playEventSound(_resetSound.value)
+    }
+
+    private fun handleTimerFinished() {
+        if (endHandled) return
+        endHandled = true
+
+        alarmManager.cancel(alarmIntent)
+        _isRunning.value = false
+        uiUpdateJob?.cancel()
+        uiUpdateJob = null
+
+        // Immediately save the finish time to block the observer from auto-restarting
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit(commit = true) {
+            putLong(AppConstants.KEY_LAST_FINISH_TIME, System.currentTimeMillis())
+        }
+
+        _remainingTime.value = 0 // Ensure it shows 00:00
+        startForeground(NOTIFICATION_ID, createNotification("Timer Finished"))
+        playSound()
     }
 
     private fun playSound() {
-        stopSound() 
+        stopSound()
+
+        val player = createPlayer(_endSound.value)
+        if (player == null) {
+            finishAndReset()
+            return
+        }
+
+        wakeLock?.acquire(10_000)
+        mediaPlayer = player
+        player.setOnPreparedListener { it.start() }
+        player.setOnCompletionListener { finishAndReset() }
+        player.setOnErrorListener { _, _, _ -> finishAndReset(); true }
+        try {
+            player.prepareAsync()
+        } catch (e: Exception) {
+            Log.e("TimerService", "Error preparing end sound", e)
+            finishAndReset()
+        }
+    }
+
+    private fun playEventSound(soundId: String) {
+        stopEventSound()
+
+        val player = createPlayer(soundId) ?: return
+
+        wakeLock?.acquire(10_000)
+        eventPlayer = player
+        player.setOnPreparedListener { it.start() }
+        player.setOnCompletionListener { stopEventSound() }
+        player.setOnErrorListener { _, _, _ -> stopEventSound(); true }
+        try {
+            player.prepareAsync()
+        } catch (e: Exception) {
+            Log.e("TimerService", "Error preparing event sound '$soundId'", e)
+            stopEventSound()
+        }
+    }
+
+    private fun createPlayer(soundId: String): MediaPlayer? {
+        if (soundId == SoundCatalog.NONE) return null
+
+        val afd = try {
+            SoundCatalog.resolve(this, soundId)
+        } catch (e: Exception) {
+            Log.e("TimerService", "Error opening sound '$soundId'", e)
+            return null
+        } ?: return null
 
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
-        wakeLock?.acquire(10_000)
-
-        try {
-            val afd = resources.openRawResourceFd(R.raw.beep)
-            mediaPlayer = MediaPlayer().apply {
+        return try {
+            MediaPlayer().apply {
                 setAudioAttributes(audioAttributes)
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                setOnCompletionListener { finishAndReset() }
-                setOnErrorListener { _, _, _ -> finishAndReset(); true }
-                prepare()
-                start()
             }
-            afd.close()
         } catch (e: Exception) {
-            Log.e("TimerService", "Error playing sound", e)
-            finishAndReset()
+            Log.e("TimerService", "Error preparing sound '$soundId'", e)
+            null
+        } finally {
+            try {
+                afd.close()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -237,6 +336,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private fun stopSound() {
         mediaPlayer?.apply {
             try {
+                setOnPreparedListener(null)
                 setOnCompletionListener(null)
                 setOnErrorListener(null)
                 if (isPlaying) stop()
@@ -246,6 +346,20 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         mediaPlayer = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
         focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+    }
+
+    private fun stopEventSound() {
+        val player = eventPlayer ?: return
+        eventPlayer = null
+        try {
+            player.setOnPreparedListener(null)
+            player.setOnCompletionListener(null)
+            player.setOnErrorListener(null)
+            if (player.isPlaying) player.stop()
+            player.release()
+        } catch (e: Exception) {
+        }
+        if (wakeLock?.isHeld == true) wakeLock?.release()
     }
 
     override fun onAudioFocusChange(focusChange: Int) {}

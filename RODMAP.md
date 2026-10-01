@@ -41,10 +41,12 @@ This document outlines the steps taken to create the timer application and futur
 *   [x] **Clear Permission Status**: Immediate feedback on required system settings.
 *   [x] **State Persistence**: Saves last set time in `SharedPreferences`.
 
+### Step 8: Sound & Customization [DONE]
+*   [x] **Sound Selector UI**: Dropdowns for the Arm, End, and Reset events on the main screen.
+*   [x] **Sound Library**: Auto-discovers audio files in `assets/sounds/`, plus built-in beep and silent options.
+*   [x] **Preview on Select**: Choosing a sound plays it immediately.
+*   [x] **Arm & Reset Sounds**: Played when the timer starts and when it is reset/cancelled.
+
 ### Future Roadmap
-*   [ ] **Sound & Customization**:
-    *   Make selection UI for completion sound.
-    *   Create some sounds to add.
-    *   Add an initialization sound when the timer starts.
 *   [ ] **Distribution**:
     *   Add a beta app to the Google Play Store.

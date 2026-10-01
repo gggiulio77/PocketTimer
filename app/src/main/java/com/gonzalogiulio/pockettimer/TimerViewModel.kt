@@ -30,6 +30,15 @@ class TimerViewModel : ViewModel() {
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady.asStateFlow()
 
+    private val _armSound = MutableStateFlow(SoundCatalog.BUILTIN)
+    val armSound: StateFlow<String> = _armSound.asStateFlow()
+
+    private val _endSound = MutableStateFlow(SoundCatalog.BUILTIN)
+    val endSound: StateFlow<String> = _endSound.asStateFlow()
+
+    private val _resetSound = MutableStateFlow(SoundCatalog.BUILTIN)
+    val resetSound: StateFlow<String> = _resetSound.asStateFlow()
+
     fun setTimerService(service: TimerService) {
         if (timerService === service) return
         
@@ -45,6 +54,9 @@ class TimerViewModel : ViewModel() {
             launch { service.isRunning.collect { _isRunning.value = it } }
             launch { service.minutes.collect { _minutes.value = it } }
             launch { service.seconds.collect { _seconds.value = it } }
+            launch { service.armSound.collect { _armSound.value = it } }
+            launch { service.endSound.collect { _endSound.value = it } }
+            launch { service.resetSound.collect { _resetSound.value = it } }
 
             // Signal that the ViewModel is now ready and has the correct state
             _isReady.value = true
@@ -58,6 +70,18 @@ class TimerViewModel : ViewModel() {
 
     fun onSecondsChanged(newSeconds: String) {
         timerService?.onSecondsChanged(newSeconds)
+    }
+
+    fun onArmSoundChanged(soundId: String) {
+        timerService?.onArmSoundChanged(soundId)
+    }
+
+    fun onEndSoundChanged(soundId: String) {
+        timerService?.onEndSoundChanged(soundId)
+    }
+
+    fun onResetSoundChanged(soundId: String) {
+        timerService?.onResetSoundChanged(soundId)
     }
 
     fun startTimer() {

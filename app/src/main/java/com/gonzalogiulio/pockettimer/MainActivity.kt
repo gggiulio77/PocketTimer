@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -29,7 +30,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -155,6 +160,10 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
     val seconds by timerViewModel.seconds.collectAsState()
     val remainingTime by timerViewModel.remainingTime.collectAsState()
     val isRunning by timerViewModel.isRunning.collectAsState()
+    val armSound by timerViewModel.armSound.collectAsState()
+    val endSound by timerViewModel.endSound.collectAsState()
+    val resetSound by timerViewModel.resetSound.collectAsState()
+    val soundOptions = remember(context) { SoundCatalog.list(context) }
 
     Column(
         modifier = modifier.fillMaxSize(),
@@ -187,6 +196,38 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
                         range = 0..59
                     )
                 }
+            }
+        }
+
+        if (!isRunning) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SoundDropdown(
+                    label = "Arm",
+                    selectedId = armSound,
+                    options = soundOptions,
+                    onSelect = { timerViewModel.onArmSoundChanged(it) },
+                    modifier = Modifier.weight(1f)
+                )
+                SoundDropdown(
+                    label = "End",
+                    selectedId = endSound,
+                    options = soundOptions,
+                    onSelect = { timerViewModel.onEndSoundChanged(it) },
+                    modifier = Modifier.weight(1f)
+                )
+                SoundDropdown(
+                    label = "Reset",
+                    selectedId = resetSound,
+                    options = soundOptions,
+                    onSelect = { timerViewModel.onResetSoundChanged(it) },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -276,6 +317,49 @@ fun NumberPicker(
                             TextStyle(fontSize = 64.sp, color = MaterialTheme.colorScheme.onBackground)
                         } else {
                             TextStyle(fontSize = 32.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SoundDropdown(
+    label: String,
+    selectedId: String,
+    options: List<SoundCatalog.SoundOption>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = options.firstOrNull { it.id == selectedId }?.label ?: selectedId
+
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text(text = selectedLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(text = option.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        },
+                        onClick = {
+                            expanded = false
+                            onSelect(option.id)
                         }
                     )
                 }
