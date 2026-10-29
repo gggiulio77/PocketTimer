@@ -9,4 +9,5 @@ object AppConstants {
     const val KEY_ARM_SOUND = "arm_sound"
     const val KEY_END_SOUND = "end_sound"
     const val KEY_RESET_SOUND = "reset_sound"
+    const val KEY_TIMER_VOLUME = "timer_volume"
 }

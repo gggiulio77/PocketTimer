@@ -68,61 +68,27 @@ class MediaSessionObserverService : NotificationListenerService() {
 
         filtered?.forEach { controller ->
             if (!activeControllers.containsKey(controller)) {
-                val callback = createCallback(controller)
+                val callback = createCallback()
                 controller.registerCallback(callback)
                 activeControllers[controller] = callback
             }
         }
     }
 
-    private fun createCallback(controller: MediaController): MediaController.Callback {
+    private fun createCallback(): MediaController.Callback {
         return object : MediaController.Callback() {
-            private var lastSnapshot: TrackSnapshot? = null
-            private var isInitialized = false
+            private val gestureDetector = PausePlayGestureDetector(PAUSE_PLAY_THRESHOLD_MS)
 
             override fun onPlaybackStateChanged(state: PlaybackState?) {
                 if (state == null) return
-                val metadata = controller.metadata
                 val now = SystemClock.elapsedRealtime()
-
-                if (isInitialized && lastSnapshot?.lastState == PlaybackState.STATE_PAUSED && state.state == PlaybackState.STATE_PLAYING) {
-                    val timeSincePause = now - (lastSnapshot?.stateUpdateTime ?: 0)
-                    if (timeSincePause < PAUSE_PLAY_THRESHOLD_MS) {
-                        maybeTriggerSkip(now)
-                    }
+                if (gestureDetector.onPlaybackStateChanged(state.state, now)) {
+                    maybeTriggerSkip(now)
                 }
-
-                lastSnapshot = TrackSnapshot(
-                    mediaId = extractMediaId(metadata),
-                    duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
-                    lastPosition = state.position,
-                    lastState = state.state,
-                    stateUpdateTime = now
-                )
-                isInitialized = true
             }
 
             override fun onMetadataChanged(metadata: MediaMetadata?) {
-                val newMediaId = extractMediaId(metadata)
-                val previous = lastSnapshot ?: run {
-                    lastSnapshot = TrackSnapshot(
-                        mediaId = newMediaId,
-                        duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
-                        lastPosition = 0L,
-                        lastState = PlaybackState.STATE_NONE,
-                        stateUpdateTime = SystemClock.elapsedRealtime()
-                    )
-                    return
-                }
-                if (previous.mediaId == newMediaId) return
-                lastSnapshot = TrackSnapshot(
-                    mediaId = newMediaId,
-                    duration = metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
-                    lastPosition = 0L,
-                    lastState = PlaybackState.STATE_NONE,
-                    stateUpdateTime = SystemClock.elapsedRealtime()
-                )
-                isInitialized = false
+                gestureDetector.onMetadataChanged(extractMediaId(metadata))
             }
         }
     }
@@ -179,10 +145,50 @@ class MediaSessionObserverService : NotificationListenerService() {
     }
 }
 
-private data class TrackSnapshot(
-    val mediaId: String?,
-    val duration: Long,
-    val lastPosition: Long,
-    val lastState: Int,
-    val stateUpdateTime: Long
-)
+internal class PausePlayGestureDetector(
+    private val pausePlayThresholdMs: Long
+) {
+    private var pausedAtMs: Long? = null
+    private var currentMediaId: String? = null
+    private var hasObservedPlaying = false
+
+    fun onPlaybackStateChanged(state: Int, nowMs: Long): Boolean = when (state) {
+        PlaybackState.STATE_PAUSED -> {
+            // A newly registered controller can initially report PAUSED. Only a
+            // pause observed after playback in this same session can arm the gesture.
+            pausedAtMs = if (hasObservedPlaying) nowMs else null
+            false
+        }
+        PlaybackState.STATE_PLAYING -> {
+            val pausedAt = pausedAtMs
+            pausedAtMs = null
+            val shouldTrigger = hasObservedPlaying && pausedAt != null &&
+                nowMs - pausedAt in 0 until pausePlayThresholdMs
+            hasObservedPlaying = true
+            shouldTrigger
+        }
+        PlaybackState.STATE_STOPPED,
+        PlaybackState.STATE_ERROR -> {
+            pausedAtMs = null
+            hasObservedPlaying = false
+            false
+        }
+        PlaybackState.STATE_SKIPPING_TO_NEXT,
+        PlaybackState.STATE_SKIPPING_TO_PREVIOUS,
+        PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM -> {
+            pausedAtMs = null
+            false
+        }
+        else -> false
+    }
+
+    fun onMetadataChanged(mediaId: String?) {
+        // A missing ID is not enough evidence of a track change. Some players
+        // temporarily clear metadata while transitioning between playback states.
+        if (mediaId == null) return
+        if (currentMediaId != null && currentMediaId != mediaId) {
+            pausedAtMs = null
+        }
+        currentMediaId = mediaId
+    }
+}

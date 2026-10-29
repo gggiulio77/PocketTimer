@@ -35,6 +35,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -64,6 +65,7 @@ import com.gonzalogiulio.pockettimer.AppConstants.PREFS_NAME
 import com.gonzalogiulio.pockettimer.ui.theme.PocketTimerTheme
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -163,6 +165,7 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
     val armSound by timerViewModel.armSound.collectAsState()
     val endSound by timerViewModel.endSound.collectAsState()
     val resetSound by timerViewModel.resetSound.collectAsState()
+    val timerVolume by timerViewModel.timerVolume.collectAsState()
     val soundOptions = remember(context) { SoundCatalog.list(context) }
 
     Column(
@@ -227,6 +230,32 @@ fun TimerScreen(modifier: Modifier = Modifier, timerViewModel: TimerViewModel) {
                     options = soundOptions,
                     onSelect = { timerViewModel.onResetSoundChanged(it) },
                     modifier = Modifier.weight(1f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Timer volume")
+                    Text(text = "$timerVolume%")
+                }
+                Slider(
+                    value = timerVolume.toFloat(),
+                    onValueChange = { timerViewModel.onTimerVolumeChanged(it.roundToInt()) },
+                    valueRange = 0f..100f
+                )
+                Text(
+                    text = "Other audio is briefly lowered while timer sounds play.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

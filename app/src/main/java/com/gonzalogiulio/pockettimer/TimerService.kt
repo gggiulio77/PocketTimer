@@ -25,6 +25,7 @@ import com.gonzalogiulio.pockettimer.AppConstants.KEY_END_SOUND
 import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_MINUTES
 import com.gonzalogiulio.pockettimer.AppConstants.KEY_LAST_SECONDS
 import com.gonzalogiulio.pockettimer.AppConstants.KEY_RESET_SOUND
+import com.gonzalogiulio.pockettimer.AppConstants.KEY_TIMER_VOLUME
 import com.gonzalogiulio.pockettimer.AppConstants.PREFS_NAME
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +53,10 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private lateinit var alarmManager: AlarmManager
     private lateinit var alarmIntent: PendingIntent
     private var focusRequest: AudioFocusRequest? = null
+    private val timerAudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
 
     // --- State Management ---
     private val _remainingTime = MutableStateFlow(0L)
@@ -78,6 +83,9 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private val _resetSound = MutableStateFlow(SoundCatalog.BUILTIN)
     val resetSound: StateFlow<String> = _resetSound.asStateFlow()
 
+    private val _timerVolume = MutableStateFlow(100)
+    val timerVolume: StateFlow<Int> = _timerVolume.asStateFlow()
+
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
@@ -103,6 +111,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         _armSound.value = prefs.getString(KEY_ARM_SOUND, SoundCatalog.BUILTIN) ?: SoundCatalog.BUILTIN
         _endSound.value = prefs.getString(KEY_END_SOUND, SoundCatalog.BUILTIN) ?: SoundCatalog.BUILTIN
         _resetSound.value = prefs.getString(KEY_RESET_SOUND, SoundCatalog.BUILTIN) ?: SoundCatalog.BUILTIN
+        _timerVolume.value = prefs.getInt(KEY_TIMER_VOLUME, 100).coerceIn(0, 100)
         setTimer()
         _isReady.value = true
     }
@@ -149,6 +158,17 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     fun onEndSoundChanged(soundId: String) = onSoundChanged(_endSound, KEY_END_SOUND, soundId)
 
     fun onResetSoundChanged(soundId: String) = onSoundChanged(_resetSound, KEY_RESET_SOUND, soundId)
+
+    fun onTimerVolumeChanged(volume: Int) {
+        val newVolume = volume.coerceIn(0, 100)
+        _timerVolume.value = newVolume
+        val playerVolume = newVolume / 100f
+        mediaPlayer?.setVolume(playerVolume, playerVolume)
+        eventPlayer?.setVolume(playerVolume, playerVolume)
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            putInt(KEY_TIMER_VOLUME, newVolume)
+        }
+    }
 
     private fun onSoundChanged(flow: MutableStateFlow<String>, key: String, soundId: String) {
         flow.value = soundId
@@ -260,6 +280,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
         wakeLock?.acquire(10_000)
         mediaPlayer = player
+        requestAudioFocus()
         player.setOnPreparedListener { it.start() }
         player.setOnCompletionListener { finishAndReset() }
         player.setOnErrorListener { _, _, _ -> finishAndReset(); true }
@@ -278,6 +299,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
 
         wakeLock?.acquire(10_000)
         eventPlayer = player
+        requestAudioFocus()
         player.setOnPreparedListener { it.start() }
         player.setOnCompletionListener { stopEventSound() }
         player.setOnErrorListener { _, _, _ -> stopEventSound(); true }
@@ -299,14 +321,11 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
             return null
         } ?: return null
 
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-
         return try {
             MediaPlayer().apply {
-                setAudioAttributes(audioAttributes)
+                setAudioAttributes(timerAudioAttributes)
+                val volume = _timerVolume.value / 100f
+                setVolume(volume, volume)
                 setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             }
         } catch (e: Exception) {
@@ -318,6 +337,25 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
             } catch (_: Exception) {
             }
         }
+    }
+
+    private fun requestAudioFocus() {
+        if (focusRequest != null || _timerVolume.value == 0) return
+
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            .setAudioAttributes(timerAudioAttributes)
+            .setOnAudioFocusChangeListener(this)
+            .setWillPauseWhenDucked(false)
+            .build()
+        if (audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            focusRequest = request
+        }
+    }
+
+    private fun abandonAudioFocusIfIdle() {
+        if (mediaPlayer != null || eventPlayer != null) return
+        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        focusRequest = null
     }
 
     private fun finishAndReset() {
@@ -345,7 +383,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         }
         mediaPlayer = null
         if (wakeLock?.isHeld == true) wakeLock?.release()
-        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        abandonAudioFocusIfIdle()
     }
 
     private fun stopEventSound() {
@@ -360,6 +398,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
         } catch (e: Exception) {
         }
         if (wakeLock?.isHeld == true) wakeLock?.release()
+        abandonAudioFocusIfIdle()
     }
 
     override fun onAudioFocusChange(focusChange: Int) {}
