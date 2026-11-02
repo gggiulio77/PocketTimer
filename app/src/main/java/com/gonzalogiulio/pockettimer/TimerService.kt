@@ -54,7 +54,7 @@ class TimerService : Service(), AudioManager.OnAudioFocusChangeListener {
     private lateinit var alarmIntent: PendingIntent
     private var focusRequest: AudioFocusRequest? = null
     private val timerAudioAttributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ALARM)
+        .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
         .build()
 
